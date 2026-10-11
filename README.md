@@ -103,8 +103,52 @@ Each pane owns its `WKWebView`. SwiftUI only re-parents the view when the
 split tree changes shape, so pages never reload when you split, close or zoom
 something else.
 
-## Next up
+## Ideas for future versions
 
-Ideas for the next iterations: session restore, history and autocomplete in
-the omnibox, a command palette, find in page, a settings window (search engine,
-favourites), drag-to-rearrange panes, and per-pane privacy.
+Candidate features, roughly grouped. None of these are built yet.
+
+### Panes & layout
+- **Session restore**: reopen the last layout, with each pane's page and back/forward history.
+- **Saved layouts (workspaces)**: name an arrangement of panes ("Research", "Dev") and switch between them.
+- **Layout presets**: one-click 2-up, 3-column, 2×2 grid, or main pane with a sidebar stack.
+- **Pinned panes**: keep a pane (music, chat, docs) fixed in place while others come and go.
+- **Linked panes**: a reference pane where every link clicked opens in a chosen neighbour pane.
+- **Swap with neighbour** shortcuts (⌃⌥ + arrows) to move panes without dragging.
+- **Undo close pane** (⇧⌘T) with its history intact.
+- **Per-pane mute**, with an indicator for panes playing audio.
+
+### Address bar & navigation
+- **History and autocomplete**: suggestions from history, favorites and the search engine as you type.
+- **Command palette** (⌘K): jump to an open or minimized pane, run any command, open a URL.
+- **Search shortcuts**: `w swift` searches Wikipedia, `gh focus` searches GitHub, and so on.
+- **Find in page** (⌘F) with a small floating bar per pane.
+- **Reader mode** for articles, sized to the pane.
+- **Long-press back/forward** to show the pane's history list.
+
+### Privacy & security
+- **Private panes**: a pane with its own ephemeral data store that leaves nothing behind.
+- **Per-site permissions**: camera, microphone, location and notifications, managed in Settings.
+- **Content blocking** using WebKit content rules (ads, trackers), with per-site toggles.
+- **HTTPS-only mode** with a warning page before loading plain-http sites.
+- **Separate profiles** (work / personal) with isolated cookies.
+
+### Content & productivity
+- **Picture in picture** for videos, or a "float this pane" mode.
+- **Downloads panel** in the toolbar with progress and reveal-in-Finder.
+- **Bookmarks** with folders, plus import from Safari/Chrome.
+- **Share menu** and copy-link for the focused pane.
+- **Page screenshot** of a pane (visible area or full page).
+- **Split-aware print and PDF export** of the focused pane.
+
+### System integration
+- **Default browser support**: open links from other apps as a new split.
+- **Handoff and iCloud sync** of favorites and open pages.
+- **Shortcuts.app / AppleScript actions**: open a URL in a split, get the focused page.
+- **Customizable keyboard shortcuts** in Settings.
+- **Menu bar extra** for quickly opening a URL into the focused workspace.
+
+### Polish
+- **Animated focus transitions** and an optional "spotlight" mode that blurs unfocused panes.
+- **Pane labels on hover** showing the site and title for unfocused panes.
+- **Per-site zoom memory** so a site keeps the zoom you last used.
+- **App icon** and an onboarding page explaining splits and shortcuts.
