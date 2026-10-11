@@ -1,3 +1,6 @@
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Foundation
 
 /// Identifies a pane (a leaf) inside a ``SplitTree``.
