@@ -24,9 +24,8 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   centered; click it (or press ⌘L) to edit the full address. It accepts an
   address or a search and understands `localhost:3000`, IP addresses, `.local`
   hosts and explicit schemes.
-- **Transparent toolbar**: the toolbar and the gaps between panes take on a
-  neutral gray (white through black) matching how light the focused page is, so
-  the chrome blends with the site without picking up its hue.
+- **Transparent toolbar** over the window background, which follows the
+  system's light or dark appearance.
 - **Right-click menu** on pages and the new tab page with split, zoom, equalize
   and close actions. WebKit's "Open Link in New Window" becomes "Open Link in
   New Split".

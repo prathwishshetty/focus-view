@@ -34,7 +34,6 @@ final class Pane: Identifiable {
     private(set) var canGoForward = false
     private(set) var isSecure = false
     private(set) var themeColor: NSColor?
-    private(set) var pageBackgroundColor: NSColor?
 
     var loadError: LoadError?
 
@@ -67,12 +66,6 @@ final class Pane: Identifiable {
         if !title.isEmpty { return title }
         if let url { return AddressFormatter.displayHost(for: url) }
         return "Loading…"
-    }
-
-    /// The color the window chrome takes on so it blends with the page.
-    var chromeColor: NSColor? {
-        guard content == .web else { return nil }
-        return themeColor ?? pageBackgroundColor
     }
 
     var displayHost: String? {
@@ -209,7 +202,6 @@ final class Pane: Identifiable {
             sync(\.canGoForward) { $0.canGoForward = $1 },
             sync(\.hasOnlySecureContent) { $0.isSecure = $1 },
             sync(\.themeColor) { $0.themeColor = $1 },
-            sync(\.underPageBackgroundColor) { $0.pageBackgroundColor = $1 },
         ]
     }
 

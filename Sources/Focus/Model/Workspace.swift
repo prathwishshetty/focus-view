@@ -52,9 +52,6 @@ final class Workspace {
 
     func pane(_ id: PaneID) -> Pane? { panes[id] }
 
-    /// The window chrome blends with the focused page.
-    var chromeColor: NSColor? { focusedPane.chromeColor }
-
     // MARK: - Focus
 
     func focus(_ id: PaneID) {
