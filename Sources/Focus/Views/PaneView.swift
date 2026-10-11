@@ -27,6 +27,11 @@ struct PaneView: View {
     /// so it never covers the page otherwise.
     private var showsGrip: Bool { !isAlone && (isPointerNearTop || isBeingDragged) }
 
+    /// Minimize/maximize show on hover whenever there's more than one pane,
+    /// including while this one is maximized (to restore it).
+    private var hasSiblings: Bool { workspace.paneCount > 1 }
+    private var showsWindowControls: Bool { hasSiblings && isPointerNearTop && workspace.paneDrag == nil }
+
     var body: some View {
         ZStack(alignment: .top) {
             content
@@ -70,7 +75,7 @@ struct PaneView: View {
         }
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
-                if !isAlone {
+                if hasSiblings {
                     TopEdgeHoverZone { hovering in
                         withAnimation(.easeOut(duration: 0.15)) { isPointerNearTop = hovering }
                     }
@@ -80,6 +85,14 @@ struct PaneView: View {
                     PaneGrip(paneID: pane.id)
                         .transition(.opacity.combined(with: .offset(y: -6)))
                 }
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if showsWindowControls {
+                PaneWindowControls(paneID: pane.id, isMaximized: workspace.zoomedPaneID == pane.id)
+                    .padding(.top, 5)
+                    .padding(.trailing, 6)
+                    .transition(.opacity.combined(with: .offset(y: -6)))
             }
         }
         .shadow(color: .black.opacity(isFocused && !isAlone ? 0.22 : 0.10), radius: isFocused ? 10 : 4, y: 2)
@@ -218,6 +231,54 @@ private struct PaneGrip: View {
             )
             .help("Drag to move this pane")
             .accessibilityLabel("Move pane")
+    }
+}
+
+/// Minimize and maximize buttons for a pane, revealed near its top edge.
+private struct PaneWindowControls: View {
+    let paneID: PaneID
+    let isMaximized: Bool
+    @Environment(Workspace.self) private var workspace
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ControlButton(symbol: "minus", help: "Minimize pane (⌃⌘M)") {
+                workspace.minimize(paneID)
+            }
+            ControlButton(
+                symbol: isMaximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                help: isMaximized ? "Restore pane size (⇧⌘↩)" : "Maximize pane (⇧⌘↩)"
+            ) {
+                workspace.toggleZoom(paneID)
+            }
+        }
+        .padding(3)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
+    }
+
+    private struct ControlButton: View {
+        let symbol: String
+        let help: String
+        let action: () -> Void
+        @State private var isHovering = false
+
+        var body: some View {
+            Button(action: action) {
+                Image(systemName: symbol)
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 22, height: 18)
+                    .foregroundStyle(isHovering ? .primary : .secondary)
+                    .background(
+                        Capsule().fill(Color.primary.opacity(isHovering ? 0.1 : 0))
+                    )
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovering = $0 }
+            .help(help)
+            .accessibilityLabel(help)
+        }
     }
 }
 

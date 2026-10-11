@@ -5,7 +5,11 @@ import SwiftUI
 /// The one address field. It always reflects — and drives — the focused pane.
 ///
 /// At rest it shows the page's host, centered. Clicking it (or ⌘L) switches to
-/// the full, left-aligned address with everything selected, ready to replace.
+/// the full address with everything selected, ready to replace.
+///
+/// The field itself is always left-aligned and visible (an invisible field can't
+/// take focus); at rest it's empty and a centered label is drawn over it. Flipping
+/// the field's own alignment would leave the cursor stranded in the middle.
 struct Omnibox: View {
     @Environment(Workspace.self) private var workspace
     @State private var text = ""
@@ -18,13 +22,19 @@ struct Omnibox: View {
             leadingIcon(for: pane)
                 .frame(width: 16)
 
-            TextField("Search or enter address", text: $text)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: isEditing ? .regular : .medium))
-                .multilineTextAlignment(isEditing ? .leading : .center)
-                .focused($isEditing)
-                .onSubmit(submit)
-                .onExitCommand(perform: cancel)
+            ZStack {
+                TextField("", text: $text, prompt: Text(isEditing ? "Search or enter address" : ""))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .focused($isEditing)
+                    .onSubmit(submit)
+                    .onExitCommand(perform: cancel)
+
+                if !isEditing {
+                    restingLabel(for: pane)
+                        .allowsHitTesting(false)
+                }
+            }
 
             trailingButton(for: pane)
                 .frame(width: 16)
@@ -68,6 +78,21 @@ struct Omnibox: View {
         .foregroundStyle(.secondary)
     }
 
+    /// The centered text shown when not editing: the site's host, or the prompt.
+    @ViewBuilder
+    private func restingLabel(for pane: Pane) -> some View {
+        if let host = pane.displayHost {
+            Text(host)
+                .font(.system(size: 13, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        } else {
+            Text("Search or enter address")
+                .font(.system(size: 13))
+                .foregroundStyle(.tertiary)
+        }
+    }
+
     /// Reload/stop, or an empty slot of the same width so the resting text stays centered.
     @ViewBuilder
     private func trailingButton(for pane: Pane) -> some View {
@@ -87,9 +112,9 @@ struct Omnibox: View {
         }
     }
 
-    /// The compact form shown when not editing: just the host.
+    /// At rest the field is empty; `restingLabel` shows the host on top of it.
     private func showRestingText() {
-        text = workspace.focusedPane.displayHost ?? ""
+        text = ""
     }
 
     private func submit() {

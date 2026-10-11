@@ -66,8 +66,17 @@ struct FocusCommands: Commands {
 
             Divider()
 
-            Button(workspace.isZoomed ? "Unzoom Pane" : "Zoom Pane") { workspace.toggleZoom() }
+            Button(workspace.isZoomed ? "Restore Pane Size" : "Maximize Pane") { workspace.toggleZoom() }
                 .keyboardShortcut(.return, modifiers: [.command, .shift])
+            Button("Minimize Pane") { workspace.minimizeFocusedPane() }
+                .keyboardShortcut("m", modifiers: [.command, .control])
+                .disabled(workspace.paneCount < 2)
+            Menu("Restore Minimized Pane") {
+                ForEach(workspace.minimizedPanes) { entry in
+                    Button(workspace.pane(entry.id)?.displayTitle ?? "Pane") { workspace.restore(entry.id) }
+                }
+            }
+            .disabled(workspace.minimizedPanes.isEmpty)
             Button("Equalize Panes") { workspace.equalize() }
                 .keyboardShortcut("=", modifiers: [.command, .control])
 

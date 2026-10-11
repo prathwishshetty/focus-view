@@ -17,6 +17,8 @@ final class Workspace {
     private(set) var focusedPaneID: PaneID
     /// When set, only this pane is shown, filling the window.
     private(set) var zoomedPaneID: PaneID?
+    /// Panes taken out of the layout but kept loaded, newest last.
+    private(set) var minimizedPanes: [MinimizedPane] = []
 
     /// Bumped to ask the omnibox to take keyboard focus.
     private(set) var addressFocusRequest = 0
@@ -126,6 +128,8 @@ final class Workspace {
     }
 
     private func insertPane(_ pane: Pane, beside target: PaneID, direction: SplitDirection, focus shouldFocus: Bool) {
+        // A minimized pane can still open popups; those land next to the focused pane.
+        let target = tree.contains(target) ? target : focusedPaneID
         withAnimation(Self.layoutAnimation) {
             zoomedPaneID = nil
             panes[pane.id] = pane
@@ -153,6 +157,16 @@ final class Workspace {
     /// Closes a pane. Closing the last pane resets it to the new tab page.
     func close(_ id: PaneID) {
         guard let pane = panes[id] else { return }
+
+        if minimizedPanes.contains(where: { $0.id == id }) {
+            withAnimation(Self.layoutAnimation) {
+                minimizedPanes.removeAll { $0.id == id }
+                panes[id] = nil
+            }
+            paneViews[id] = nil
+            pane.tearDown()
+            return
+        }
 
         if tree.count == 1 {
             guard pane.content != .newTab else { return }
@@ -296,11 +310,13 @@ final class Workspace {
         if tree.count > 1 {
             let zoomed = zoomedPaneID == id
             menu.addItem(ClosureMenuItem(
-                zoomed ? "Unzoom Pane" : "Zoom Pane",
+                zoomed ? "Restore Pane Size" : "Maximize Pane",
                 symbol: zoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
             ) { [weak self] in
-                self?.focus(id)
-                self?.toggleZoom()
+                self?.toggleZoom(id)
+            })
+            menu.addItem(ClosureMenuItem("Minimize Pane", symbol: "minus") { [weak self] in
+                self?.minimize(id)
             })
             menu.addItem(ClosureMenuItem("Equalize Panes", symbol: "square.grid.2x2") { [weak self] in
                 self?.equalize()
@@ -315,14 +331,69 @@ final class Workspace {
     // MARK: - Layout
 
     func toggleZoom() {
+        toggleZoom(focusedPaneID)
+    }
+
+    /// Maximizes a pane to fill the window, or restores the layout if it already does.
+    func toggleZoom(_ id: PaneID) {
+        guard tree.contains(id) else { return }
         withAnimation(Self.layoutAnimation) {
             if zoomedPaneID != nil {
                 zoomedPaneID = nil
             } else if tree.count > 1 {
-                zoomedPaneID = focusedPaneID
+                zoomedPaneID = id
             }
+            focusedPaneID = id
         }
         focusContent()
+    }
+
+    // MARK: - Minimizing
+
+    /// Takes a pane out of the layout, keeping its page loaded, so it can be restored later.
+    func minimize(_ id: PaneID) {
+        guard tree.count > 1, tree.contains(id) else { return }
+        let frames = tree.layout()
+        var entry = MinimizedPane(id: id, anchor: nil, direction: .right)
+        withAnimation(Self.layoutAnimation) {
+            guard let neighbor = tree.remove(id) else { return }
+            // Remember which pane it sat beside, and on which side, to restore it there.
+            if let mine = frames[id], let theirs = frames[neighbor] {
+                entry.anchor = neighbor
+                entry.direction = Self.direction(from: theirs, to: mine)
+            }
+            minimizedPanes.append(entry)
+            if zoomedPaneID == id { zoomedPaneID = nil }
+            if focusedPaneID == id { focusedPaneID = neighbor }
+        }
+        focusContent()
+    }
+
+    func minimizeFocusedPane() {
+        minimize(focusedPaneID)
+    }
+
+    /// Puts a minimized pane back where it was (or beside the focused pane) and focuses it.
+    func restore(_ id: PaneID) {
+        guard let index = minimizedPanes.firstIndex(where: { $0.id == id }) else { return }
+        let entry = minimizedPanes[index]
+        let anchor = entry.anchor.flatMap { tree.contains($0) ? $0 : nil }
+        let target = anchor ?? focusedPaneID
+        let direction = anchor != nil ? entry.direction : automaticDirection(for: target)
+        withAnimation(Self.layoutAnimation) {
+            minimizedPanes.remove(at: index)
+            zoomedPaneID = nil
+            tree.split(target, direction: direction, newPane: id)
+            focusedPaneID = id
+        }
+        focusContent()
+    }
+
+    private static func direction(from anchor: CGRect, to frame: CGRect) -> SplitDirection {
+        let dx = frame.midX - anchor.midX
+        let dy = frame.midY - anchor.midY
+        if abs(dx) >= abs(dy) { return dx >= 0 ? .right : .left }
+        return dy >= 0 ? .down : .up
     }
 
     func equalize() {
@@ -375,6 +446,15 @@ enum PaneDropZone: Equatable {
         let distances: [(SplitDirection, CGFloat)] = [(.left, x), (.right, 1 - x), (.up, y), (.down, 1 - y)]
         self = .edge(distances.min { $0.1 < $1.1 }!.0)
     }
+}
+
+/// A pane taken out of the layout, and where to put it back.
+struct MinimizedPane: Equatable, Identifiable {
+    let id: PaneID
+    /// The pane it sat beside when minimized.
+    var anchor: PaneID?
+    /// Which side of `anchor` it was on.
+    var direction: SplitDirection
 }
 
 /// Where a dragged pane will land.

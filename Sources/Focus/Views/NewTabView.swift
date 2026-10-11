@@ -287,14 +287,14 @@ struct PaneContextMenu: View {
         Button("Split Down", systemImage: "rectangle.split.1x2") { workspace.split(.down, from: paneID) }
         if workspace.paneCount > 1 {
             Button(
-                workspace.zoomedPaneID == paneID ? "Unzoom Pane" : "Zoom Pane",
+                workspace.zoomedPaneID == paneID ? "Restore Pane Size" : "Maximize Pane",
                 systemImage: workspace.zoomedPaneID == paneID
                     ? "arrow.down.right.and.arrow.up.left"
                     : "arrow.up.left.and.arrow.down.right"
             ) {
-                workspace.focus(paneID)
-                workspace.toggleZoom()
+                workspace.toggleZoom(paneID)
             }
+            Button("Minimize Pane", systemImage: "minus") { workspace.minimize(paneID) }
             Button("Equalize Panes", systemImage: "square.grid.2x2") { workspace.equalize() }
         }
         Divider()

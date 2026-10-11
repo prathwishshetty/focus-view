@@ -78,6 +78,8 @@ final class ShortcutMonitor {
                 workspace.resizeFocused(arrow)
             } else if character == "=" {
                 workspace.equalize()
+            } else if character == "m" {
+                workspace.minimizeFocusedPane()
             } else {
                 return false
             }

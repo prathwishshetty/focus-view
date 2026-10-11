@@ -17,6 +17,10 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   Drop it on another pane's edge to dock it on that side, in the middle to swap
   the two, or along an edge of the window to make it a full-height column or
   full-width row (two rows become two columns this way).
+- **Maximize & minimize**: hover near a pane's top edge for its controls.
+  Maximize fills the window with the pane (click again to restore). Minimize
+  takes it out of the layout but keeps it loaded, as a chip in the toolbar;
+  click the chip to put it back where it was.
 - **Focus navigation**: move between panes by direction (it uses the actual
   geometry, like Ghostty's `goto_split`) or cycle through them. Unfocused panes
   dim slightly.
@@ -49,7 +53,8 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
 | Close window | ⇧⌘W |
 | Move focus | ⌥⌘ + arrow keys |
 | Next / previous pane | ⌃⇥ / ⌃⇧⇥ |
-| Zoom pane | ⇧⌘↩ |
+| Maximize / restore pane | ⇧⌘↩ |
+| Minimize pane | ⌃⌘M |
 | Resize split | ⌃⌘ + arrow keys |
 | Equalize splits | ⌃⌘= |
 | Focus omnibox | ⌘L |
