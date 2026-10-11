@@ -10,6 +10,7 @@ struct PaneView: View {
 
     @Environment(Workspace.self) private var workspace
     @Environment(\.colorScheme) private var colorScheme
+    @State private var isPointerNearTop = false
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: PaneMetrics.cornerRadius, style: .continuous)
@@ -21,6 +22,10 @@ struct PaneView: View {
     }
 
     private var isBeingDragged: Bool { workspace.paneDrag?.source == pane.id }
+
+    /// The drag handle only shows while the pointer is near the top edge (or mid-drag),
+    /// so it never covers the page otherwise.
+    private var showsGrip: Bool { !isAlone && (isPointerNearTop || isBeingDragged) }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -54,8 +59,17 @@ struct PaneView: View {
             }
         }
         .overlay(alignment: .top) {
-            if !isAlone {
-                PaneGrip(paneID: pane.id)
+            ZStack(alignment: .top) {
+                if !isAlone {
+                    TopEdgeHoverZone { hovering in
+                        withAnimation(.easeOut(duration: 0.15)) { isPointerNearTop = hovering }
+                    }
+                    .frame(height: 36)
+                }
+                if showsGrip {
+                    PaneGrip(paneID: pane.id)
+                        .transition(.opacity.combined(with: .offset(y: -6)))
+                }
             }
         }
         .opacity(isBeingDragged ? 0.55 : 1)

@@ -12,8 +12,9 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
 - **Splits**: split any pane right or down, drag the gaps to resize,
   double-click a gap to even it out, equalize everything, or zoom one pane to
   fill the window.
-- **Rearranging**: drag a pane by the handle at its top onto another pane. Drop
-  it on an edge to dock it on that side, or in the middle to swap the two.
+- **Rearranging**: move the pointer to the top edge of a pane to reveal its
+  handle, then drag it onto another pane. Drop it on an edge to dock it on that
+  side, or in the middle to swap the two.
 - **Focus navigation**: move between panes by direction (it uses the actual
   geometry, like Ghostty's `goto_split`) or cycle through them. Unfocused panes
   dim slightly.
@@ -21,8 +22,9 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   centered; click it (or press ⌘L) to edit the full address. It accepts an
   address or a search and understands `localhost:3000`, IP addresses, `.local`
   hosts and explicit schemes.
-- **Transparent toolbar**: the toolbar and the gaps between panes take on the
-  focused page's theme or background color, so the chrome blends with the site.
+- **Transparent toolbar**: the toolbar and the gaps between panes take on a
+  neutral gray (white through black) matching how light the focused page is, so
+  the chrome blends with the site without picking up its hue.
 - **Right-click menu** on pages and the new tab page with split, zoom, equalize
   and close actions. WebKit's "Open Link in New Window" becomes "Open Link in
   New Split".

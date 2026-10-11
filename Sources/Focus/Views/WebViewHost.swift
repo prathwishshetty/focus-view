@@ -147,6 +147,52 @@ final class PaneHitView: NSView {
     }
 }
 
+/// Reports whether the pointer is inside it, without ever intercepting clicks.
+struct TopEdgeHoverZone: NSViewRepresentable {
+    let onHover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> HoverZoneView {
+        let view = HoverZoneView()
+        view.onHover = onHover
+        return view
+    }
+
+    func updateNSView(_ view: HoverZoneView, context: Context) {
+        view.onHover = onHover
+    }
+}
+
+final class HoverZoneView: NSView {
+    var onHover: ((Bool) -> Void)?
+
+    // Tracking areas work regardless of hit-testing, so clicks fall through to the page.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Start in the right state if the pointer is already here (deferred so
+        // SwiftUI state isn't changed mid-update).
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window else { return }
+            let point = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            self.onHover?(self.bounds.contains(point))
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
+}
+
 /// The mouse-tracking part of a pane's drag handle.
 ///
 /// Implemented in AppKit so the drag keeps tracking while the pointer passes
