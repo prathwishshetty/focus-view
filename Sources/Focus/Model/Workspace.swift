@@ -26,6 +26,7 @@ final class Workspace {
 
     /// Views covering each pane, used to hit-test drops in window coordinates.
     @ObservationIgnored private var paneViews: [PaneID: WeakView] = [:]
+    @ObservationIgnored private var canvasView: WeakView?
 
     /// The size of the pane area, used to pick a split direction automatically.
     @ObservationIgnored var canvasSize = CGSize(width: 1200, height: 800)
@@ -190,37 +191,89 @@ final class Workspace {
         paneViews[id] = WeakView(view)
     }
 
-    func beginPaneDrag(_ id: PaneID) {
-        guard tree.count > 1, zoomedPaneID == nil else { return }
-        paneDrag = PaneDrag(source: id)
+    /// Records the view covering the whole pane area (drop zones at the window edges).
+    func registerCanvasView(_ view: NSView) {
+        canvasView = WeakView(view)
     }
 
-    /// Updates the drop target under `point` (window coordinates).
-    func updatePaneDrag(at point: NSPoint, in window: NSWindow?) {
-        guard var drag = paneDrag else { return }
-        drag.target = nil
-        drag.zone = nil
-        for (id, box) in paneViews where id != drag.source {
-            guard let view = box.view, view.window === window, window != nil,
-                  !view.isHiddenOrHasHiddenAncestor else { continue }
-            let local = view.convert(point, from: nil)
-            guard view.bounds.contains(local) else { continue }
-            drag.target = id
-            drag.zone = PaneDropZone(point: local, in: view.bounds, flipped: view.isFlipped)
-            break
+    /// Picks the pane up: it becomes a postcard that follows the pointer.
+    func beginPaneDrag(_ id: PaneID) {
+        guard tree.count > 1, zoomedPaneID == nil, let pane = panes[id] else { return }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            paneDrag = PaneDrag(source: id)
         }
+        pane.webView?.takeSnapshot(with: Self.snapshotConfiguration) { [weak self] image, _ in
+            MainActor.assumeIsolated {
+                guard let self, let image, self.paneDrag?.source == id else { return }
+                self.paneDrag?.snapshot = image
+            }
+        }
+    }
+
+    private static var snapshotConfiguration: WKSnapshotConfiguration {
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = 480
+        return configuration
+    }
+
+    /// Tracks the pointer (window coordinates) and works out where the pane would land.
+    func updatePaneDrag(at point: NSPoint, in window: NSWindow?) {
+        guard var drag = paneDrag, let window else { return }
+        drag.target = nil
+
+        if let canvas = canvasView?.view, canvas.window === window {
+            let local = canvas.convert(point, from: nil)
+            let location = CGPoint(x: local.x, y: canvas.isFlipped ? local.y : canvas.bounds.height - local.y)
+            drag.location = location
+            let edge = Self.windowEdge(at: location, in: canvas.bounds.size)
+            // The handle starts near the top edge; only offer edge docking once the
+            // pointer has left the edge bands, so a small nudge doesn't dock the pane.
+            if edge == nil { drag.windowEdgesArmed = true }
+            if drag.windowEdgesArmed { drag.target = edge.map(DropTarget.windowEdge) }
+        }
+
+        if drag.target == nil {
+            for (id, box) in paneViews where id != drag.source {
+                guard let view = box.view, view.window === window, !view.isHiddenOrHasHiddenAncestor else { continue }
+                let local = view.convert(point, from: nil)
+                guard view.bounds.contains(local) else { continue }
+                drag.target = .pane(id, PaneDropZone(point: local, in: view.bounds, flipped: view.isFlipped))
+                break
+            }
+        }
+
         if drag != paneDrag { paneDrag = drag }
     }
 
-    /// Finishes a drag, moving the pane if it was dropped on another one.
+    /// Width of the band along the window's edges that docks a pane across the whole layout.
+    static func windowEdgeBand(for size: CGSize) -> CGFloat {
+        min(48, min(size.width, size.height) * 0.1)
+    }
+
+    private static func windowEdge(at point: CGPoint, in size: CGSize) -> SplitDirection? {
+        let band = windowEdgeBand(for: size)
+        let distances: [(SplitDirection, CGFloat)] = [
+            (.left, point.x), (.right, size.width - point.x),
+            (.up, point.y), (.down, size.height - point.y),
+        ]
+        guard let nearest = distances.min(by: { $0.1 < $1.1 }), nearest.1 <= band else { return nil }
+        return nearest.0
+    }
+
+    /// Drops the pane where it was released; anywhere without a target puts it back.
     func endPaneDrag() {
         guard let drag = paneDrag else { return }
-        paneDrag = nil
-        guard let target = drag.target, let zone = drag.zone else { return }
         withAnimation(Self.layoutAnimation) {
-            switch zone {
-            case .swap: tree.swap(drag.source, target)
-            case .edge(let direction): tree.move(drag.source, to: target, direction: direction)
+            paneDrag = nil
+            switch drag.target {
+            case .pane(let target, .swap)?:
+                tree.swap(drag.source, target)
+            case .pane(let target, .edge(let direction))?:
+                tree.move(drag.source, to: target, direction: direction)
+            case .windowEdge(let edge)?:
+                tree.dock(drag.source, at: edge)
+            case nil:
+                break
             }
             focusedPaneID = drag.source
         }
@@ -228,7 +281,7 @@ final class Workspace {
     }
 
     func cancelPaneDrag() {
-        paneDrag = nil
+        withAnimation(Self.layoutAnimation) { paneDrag = nil }
     }
 
     // MARK: - Context menu
@@ -327,10 +380,23 @@ enum PaneDropZone: Equatable {
     }
 }
 
+/// Where a dragged pane will land.
+enum DropTarget: Equatable {
+    /// Relative to another pane.
+    case pane(PaneID, PaneDropZone)
+    /// Along an outer edge of the whole layout, spanning it.
+    case windowEdge(SplitDirection)
+}
+
 struct PaneDrag: Equatable {
     let source: PaneID
-    var target: PaneID?
-    var zone: PaneDropZone?
+    var target: DropTarget?
+    /// Pointer position in the pane area's coordinates (top-left origin).
+    var location: CGPoint?
+    /// A picture of the page, shown on the postcard.
+    var snapshot: NSImage?
+    /// Whether docking along the window's edges is on (see `updatePaneDrag`).
+    var windowEdgesArmed = false
 }
 
 final class WeakView {

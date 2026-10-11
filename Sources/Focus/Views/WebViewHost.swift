@@ -147,6 +147,34 @@ final class PaneHitView: NSView {
     }
 }
 
+/// An invisible view that hands itself to `register` once it's in a window,
+/// so code working in window coordinates can convert into SwiftUI's space.
+struct RegisteringArea: NSViewRepresentable {
+    let register: (NSView) -> Void
+
+    func makeNSView(context: Context) -> RegisteringView {
+        let view = RegisteringView()
+        view.register = register
+        return view
+    }
+
+    func updateNSView(_ view: RegisteringView, context: Context) {
+        view.register = register
+    }
+}
+
+final class RegisteringView: NSView {
+    var register: ((NSView) -> Void)?
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { register?(self) }
+    }
+}
+
 /// Reports whether the pointer is inside it, without ever intercepting clicks.
 struct TopEdgeHoverZone: NSViewRepresentable {
     let onHover: (Bool) -> Void

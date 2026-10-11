@@ -13,8 +13,10 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   double-click a gap to even it out, equalize everything, or zoom one pane to
   fill the window.
 - **Rearranging**: move the pointer to the top edge of a pane to reveal its
-  handle, then drag it onto another pane. Drop it on an edge to dock it on that
-  side, or in the middle to swap the two.
+  handle and grab it. The pane lifts into a postcard that follows the pointer.
+  Drop it on another pane's edge to dock it on that side, in the middle to swap
+  the two, or along an edge of the window to make it a full-height column or
+  full-width row (two rows become two columns this way).
 - **Focus navigation**: move between panes by direction (it uses the actual
   geometry, like Ghostty's `goto_split`) or cycle through them. Unfocused panes
   dim slightly.
@@ -29,7 +31,7 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   and close actions. WebKit's "Open Link in New Window" becomes "Open Link in
   New Split".
 - **New tab page** with a clock, a Liquid Glass search field, favourite sites
-  and a list of shortcuts. It adapts to small panes.
+  (just their icons) and a list of shortcuts. It adapts to small panes.
 - `target=_blank`, `window.open` and ⌘-click open as a **new split** next to the
   current pane. ⇧⌘-click also moves focus to it.
 - Downloads go to `~/Downloads`. JavaScript alerts, confirms and prompts, file

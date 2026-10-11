@@ -10,6 +10,9 @@ struct WorkspaceView: View {
     var body: some View {
         GeometryReader { proxy in
             panes
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .background(RegisteringArea { workspace.registerCanvasView($0) })
+                .overlay { PaneDragOverlay(size: proxy.size) }
                 .onAppear { workspace.canvasSize = proxy.size }
                 .onChange(of: proxy.size) { _, size in workspace.canvasSize = size }
         }

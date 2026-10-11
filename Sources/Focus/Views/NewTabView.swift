@@ -137,20 +137,19 @@ private struct ClockHeader: View {
 struct FavoriteSite: Identifiable, Hashable {
     let name: String
     let url: URL
-    let tint: Color
 
     var id: URL { url }
     var host: String { url.host ?? name }
 
     static let defaults: [FavoriteSite] = [
-        .init(name: "Apple", url: URL(string: "https://www.apple.com")!, tint: .gray),
-        .init(name: "GitHub", url: URL(string: "https://github.com")!, tint: .purple),
-        .init(name: "YouTube", url: URL(string: "https://www.youtube.com")!, tint: .red),
-        .init(name: "Wikipedia", url: URL(string: "https://www.wikipedia.org")!, tint: .teal),
-        .init(name: "Hacker News", url: URL(string: "https://news.ycombinator.com")!, tint: .orange),
-        .init(name: "Reddit", url: URL(string: "https://www.reddit.com")!, tint: .orange),
-        .init(name: "Figma", url: URL(string: "https://www.figma.com")!, tint: .pink),
-        .init(name: "Claude", url: URL(string: "https://claude.ai")!, tint: .brown),
+        .init(name: "Apple", url: URL(string: "https://www.apple.com")!),
+        .init(name: "GitHub", url: URL(string: "https://github.com")!),
+        .init(name: "YouTube", url: URL(string: "https://www.youtube.com")!),
+        .init(name: "Wikipedia", url: URL(string: "https://www.wikipedia.org")!),
+        .init(name: "Hacker News", url: URL(string: "https://news.ycombinator.com")!),
+        .init(name: "Reddit", url: URL(string: "https://www.reddit.com")!),
+        .init(name: "Figma", url: URL(string: "https://www.figma.com")!),
+        .init(name: "Claude", url: URL(string: "https://claude.ai")!),
     ]
 }
 
@@ -167,7 +166,7 @@ private struct FavoritesGrid: View {
         ) {
             ForEach(FavoriteSite.defaults) { site in
                 Button { open(site) } label: {
-                    FavoriteTile(site: site, size: compact ? 46 : 54)
+                    FavoriteTile(site: site, size: compact ? 32 : 40)
                 }
                 .buttonStyle(TileButtonStyle())
                 .help(site.url.absoluteString)
@@ -192,29 +191,21 @@ private struct FavoriteTile: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ZStack {
-                // Monogram first, so there's always something while the icon loads.
-                Text(site.name.prefix(1))
-                    .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
-                    .foregroundStyle(site.tint.gradient)
-                AsyncImage(url: faviconURL) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .interpolation(.high)
-                            .scaledToFit()
-                            .frame(width: size * 0.5, height: size * 0.5)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .background(
-                                RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-                                    .fill(.background)
-                                    .frame(width: size, height: size)
-                            )
-                    }
+            AsyncImage(url: faviconURL) { phase in
+                if let image = phase.image {
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+                } else {
+                    // A plain letter until the icon arrives (or if it can't load).
+                    Text(site.name.prefix(1))
+                        .font(.system(size: size * 0.55, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(width: size, height: size)
-            .glassEffect(.regular.tint(site.tint.opacity(0.12)), in: .rect(cornerRadius: size * 0.28))
 
             Text(site.name)
                 .font(.system(size: 11.5, weight: .medium))

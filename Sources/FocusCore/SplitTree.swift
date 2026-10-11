@@ -206,6 +206,26 @@ public struct SplitTree: Equatable, Codable, Sendable {
         return true
     }
 
+    /// Moves `pane` to an outer edge of the whole layout, spanning its full height
+    /// (left/right) or width (up/down). Two rows become two columns this way.
+    @discardableResult
+    public mutating func dock(_ pane: PaneID, at edge: SplitDirection) -> Bool {
+        guard contains(pane), count > 1 else { return false }
+        var copy = self
+        guard copy.remove(pane) != nil else { return false }
+        // The docked pane gets a fair share: half with two panes, less with more.
+        let share = min(max(1 / Double(count), 0.25), 0.5)
+        let docked = SplitNode.leaf(pane)
+        copy.root = .split(Split(
+            axis: edge.axis,
+            ratio: edge.insertsAfter ? 1 - share : share,
+            first: edge.insertsAfter ? copy.root : docked,
+            second: edge.insertsAfter ? docked : copy.root
+        ))
+        self = copy
+        return true
+    }
+
     // MARK: - Sizing
 
     /// Sets the ratio of the split with the given identifier.

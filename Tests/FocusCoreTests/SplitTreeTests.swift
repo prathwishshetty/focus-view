@@ -177,6 +177,41 @@ import Testing
         #expect(split.axis == .vertical)
     }
 
+    @Test func dockingTurnsRowsIntoColumns() {
+        var tree = SplitTree(pane: a)
+        tree.split(a, direction: .down, newPane: b)
+        // a / b → drag the top row to the left edge → a | b
+        let docked = tree.dock(a, at: .left)
+        #expect(docked)
+        #expect(tree.leaves == [a, b])
+        guard case .split(let split) = tree.root else { Issue.record("expected split"); return }
+        #expect(split.axis == .horizontal)
+        #expect(split.ratio == 0.5)
+    }
+
+    @Test func dockingSpansTheWholeEdge() {
+        var tree = SplitTree(pane: a)
+        tree.split(a, direction: .down, newPane: b)
+        tree.split(b, direction: .right, newPane: c)
+        // a / (b | c) → dock a on the left: a spans the full height.
+        let docked = tree.dock(a, at: .left)
+        #expect(docked)
+        let frames = tree.layout()
+        #expect(frames[a]!.height == 1)
+        #expect(abs(frames[a]!.width - 1.0 / 3) < 0.001)
+        #expect(tree.neighbor(of: a, direction: .right) != nil)
+        // Docking at the bottom gives a full-width row.
+        let dockedDown = tree.dock(c, at: .down)
+        #expect(dockedDown)
+        #expect(tree.layout()[c]!.width == 1)
+    }
+
+    @Test func dockingTheOnlyPaneFails() {
+        var tree = SplitTree(pane: a)
+        let docked = tree.dock(a, at: .left)
+        #expect(!docked)
+    }
+
     @Test func replaceKeepsLayout() {
         var tree = SplitTree(pane: a)
         tree.split(a, direction: .right, newPane: b)

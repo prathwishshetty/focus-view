@@ -17,8 +17,8 @@ struct PaneView: View {
     }
 
     private var dropZone: PaneDropZone? {
-        guard let drag = workspace.paneDrag, drag.target == pane.id else { return nil }
-        return drag.zone
+        guard case .pane(let target, let zone)? = workspace.paneDrag?.target, target == pane.id else { return nil }
+        return zone
     }
 
     private var isBeingDragged: Bool { workspace.paneDrag?.source == pane.id }
@@ -38,7 +38,16 @@ struct PaneView: View {
 
             LoadingBar(progress: pane.progress, isLoading: pane.isLoading, tint: accent)
         }
+        // A lifted pane leaves an empty slot behind while its postcard is carried around.
+        .opacity(isBeingDragged ? 0.18 : 1)
         .clipShape(shape)
+        .overlay {
+            if isBeingDragged {
+                shape
+                    .strokeBorder(Color.secondary, style: StrokeStyle(lineWidth: 2, dash: [7, 6]))
+                    .allowsHitTesting(false)
+            }
+        }
         .overlay {
             // Unfocused splits recede slightly, like Ghostty's unfocused-split dimming.
             shape
@@ -49,6 +58,7 @@ struct PaneView: View {
         .overlay {
             shape
                 .strokeBorder(borderStyle, lineWidth: isFocused && !isAlone ? 2 : 1)
+                .opacity(isBeingDragged ? 0 : 1)
                 .allowsHitTesting(false)
         }
         .overlay {
@@ -72,8 +82,6 @@ struct PaneView: View {
                 }
             }
         }
-        .opacity(isBeingDragged ? 0.55 : 1)
-        .scaleEffect(isBeingDragged ? 0.985 : 1)
         .shadow(color: .black.opacity(isFocused && !isAlone ? 0.22 : 0.10), radius: isFocused ? 10 : 4, y: 2)
         .background(
             PaneHitArea(
@@ -190,8 +198,9 @@ private struct PaneGrip: View {
             .frame(width: 44, height: 14)
             .background(.regularMaterial, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
-            .opacity(isHovering || isDragging ? 1 : 0.55)
-            .scaleEffect(isHovering || isDragging ? 1.08 : 1)
+            // While carried, the postcard stands in for the pane, so the handle hides.
+            .opacity(isDragging ? 0 : (isHovering ? 1 : 0.7))
+            .scaleEffect(isHovering ? 1.08 : 1)
             .padding(.top, 5)
             .overlay(
                 PaneGripArea(
