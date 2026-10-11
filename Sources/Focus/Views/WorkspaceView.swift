@@ -15,7 +15,8 @@ struct WorkspaceView: View {
                 .onAppear { workspace.canvasSize = proxy.size }
                 .onChange(of: proxy.size) { _, size in workspace.canvasSize = size }
         }
-        .padding(PaneMetrics.gap)
+        // No top gap: the toolbar already leaves breathing room below it.
+        .padding([.horizontal, .bottom], PaneMetrics.gap)
         .background(Rectangle().fill(.background.secondary).ignoresSafeArea())
         .toolbar { toolbar }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
