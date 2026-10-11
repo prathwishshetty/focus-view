@@ -21,6 +21,12 @@ final class Workspace {
     /// Bumped to ask the omnibox to take keyboard focus.
     private(set) var addressFocusRequest = 0
 
+    /// The pane being dragged to a new position, if any.
+    private(set) var paneDrag: PaneDrag?
+
+    /// Views covering each pane, used to hit-test drops in window coordinates.
+    @ObservationIgnored private var paneViews: [PaneID: WeakView] = [:]
+
     /// The size of the pane area, used to pick a split direction automatically.
     @ObservationIgnored var canvasSize = CGSize(width: 1200, height: 800)
 
@@ -44,6 +50,9 @@ final class Workspace {
     var isZoomed: Bool { zoomedPaneID != nil }
 
     func pane(_ id: PaneID) -> Pane? { panes[id] }
+
+    /// The window chrome blends with the focused page.
+    var chromeColor: NSColor? { focusedPane.chromeColor }
 
     // MARK: - Focus
 
@@ -88,14 +97,20 @@ final class Workspace {
 
     // MARK: - Splitting
 
-    /// Splits the focused pane and shows the new tab page in the new half.
-    func split(_ direction: SplitDirection) {
-        insertPane(Pane(workspace: self), beside: focusedPaneID, direction: direction, focus: true)
+    /// Splits a pane (the focused one by default) and shows the new tab page in the new half.
+    func split(_ direction: SplitDirection, from paneID: PaneID? = nil) {
+        let target = paneID.flatMap { panes[$0] != nil ? $0 : nil } ?? focusedPaneID
+        insertPane(Pane(workspace: self), beside: target, direction: direction, focus: true)
     }
 
     /// Opens a new pane next to the focused one, along its longer side.
     func newPane() {
         split(automaticDirection(for: focusedPaneID))
+    }
+
+    /// Loads `url` in a new split next to `paneID` and focuses it.
+    func open(_ url: URL, inNewPaneBeside paneID: PaneID) {
+        openInNewPane(url, beside: paneID, focus: true)
     }
 
     /// Opens `url` in a new split next to `paneID` (⌘-click).
@@ -163,8 +178,88 @@ final class Workspace {
             if zoomedPaneID == id { zoomedPaneID = nil }
             if focusedPaneID == id, let nextFocus { focusedPaneID = nextFocus }
         }
+        paneViews[id] = nil
         pane.tearDown()
         if nextFocus != nil { focusContent() }
+    }
+
+    // MARK: - Rearranging
+
+    /// Records the view that covers a pane so drags can find it.
+    func registerPaneView(_ view: NSView, for id: PaneID) {
+        paneViews[id] = WeakView(view)
+    }
+
+    func beginPaneDrag(_ id: PaneID) {
+        guard tree.count > 1, zoomedPaneID == nil else { return }
+        paneDrag = PaneDrag(source: id)
+    }
+
+    /// Updates the drop target under `point` (window coordinates).
+    func updatePaneDrag(at point: NSPoint, in window: NSWindow?) {
+        guard var drag = paneDrag else { return }
+        drag.target = nil
+        drag.zone = nil
+        for (id, box) in paneViews where id != drag.source {
+            guard let view = box.view, view.window === window, window != nil,
+                  !view.isHiddenOrHasHiddenAncestor else { continue }
+            let local = view.convert(point, from: nil)
+            guard view.bounds.contains(local) else { continue }
+            drag.target = id
+            drag.zone = PaneDropZone(point: local, in: view.bounds, flipped: view.isFlipped)
+            break
+        }
+        if drag != paneDrag { paneDrag = drag }
+    }
+
+    /// Finishes a drag, moving the pane if it was dropped on another one.
+    func endPaneDrag() {
+        guard let drag = paneDrag else { return }
+        paneDrag = nil
+        guard let target = drag.target, let zone = drag.zone else { return }
+        withAnimation(Self.layoutAnimation) {
+            switch zone {
+            case .swap: tree.swap(drag.source, target)
+            case .edge(let direction): tree.move(drag.source, to: target, direction: direction)
+            }
+            focusedPaneID = drag.source
+        }
+        focusContent()
+    }
+
+    func cancelPaneDrag() {
+        paneDrag = nil
+    }
+
+    // MARK: - Context menu
+
+    /// Pane actions appended to a web page's right-click menu.
+    func appendPaneMenuItems(to menu: NSMenu, for id: PaneID) {
+        guard panes[id] != nil else { return }
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("Split Right", symbol: "rectangle.split.2x1") { [weak self] in
+            self?.split(.right, from: id)
+        })
+        menu.addItem(ClosureMenuItem("Split Down", symbol: "rectangle.split.1x2") { [weak self] in
+            self?.split(.down, from: id)
+        })
+        if tree.count > 1 {
+            let zoomed = zoomedPaneID == id
+            menu.addItem(ClosureMenuItem(
+                zoomed ? "Unzoom Pane" : "Zoom Pane",
+                symbol: zoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+            ) { [weak self] in
+                self?.focus(id)
+                self?.toggleZoom()
+            })
+            menu.addItem(ClosureMenuItem("Equalize Panes", symbol: "square.grid.2x2") { [weak self] in
+                self?.equalize()
+            })
+        }
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("Close Pane", symbol: "xmark") { [weak self] in
+            self?.close(id)
+        })
     }
 
     // MARK: - Layout
@@ -209,4 +304,36 @@ final class Workspace {
     func zoomIn() { focusedPane.zoomIn() }
     func zoomOut() { focusedPane.zoomOut() }
     func resetZoom() { focusedPane.resetZoom() }
+}
+
+/// Where a dragged pane will land relative to the pane under the pointer.
+enum PaneDropZone: Equatable {
+    /// Trade places with the target.
+    case swap
+    /// Dock on this side of the target.
+    case edge(SplitDirection)
+
+    /// The middle of a pane swaps; anywhere else docks on the nearest edge.
+    init(point: NSPoint, in bounds: NSRect, flipped: Bool) {
+        let x = (point.x - bounds.minX) / max(bounds.width, 1)
+        var y = (point.y - bounds.minY) / max(bounds.height, 1)
+        if !flipped { y = 1 - y }
+        if abs(x - 0.5) < 0.2, abs(y - 0.5) < 0.2 {
+            self = .swap
+            return
+        }
+        let distances: [(SplitDirection, CGFloat)] = [(.left, x), (.right, 1 - x), (.up, y), (.down, 1 - y)]
+        self = .edge(distances.min { $0.1 < $1.1 }!.0)
+    }
+}
+
+struct PaneDrag: Equatable {
+    let source: PaneID
+    var target: PaneID?
+    var zone: PaneDropZone?
+}
+
+final class WeakView {
+    weak var view: NSView?
+    init(_ view: NSView) { self.view = view }
 }

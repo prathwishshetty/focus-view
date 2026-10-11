@@ -1,3 +1,4 @@
+import AppKit
 import FocusCore
 import SwiftUI
 
@@ -8,6 +9,7 @@ struct NewTabView: View {
 
     @State private var query = ""
     @FocusState private var isFieldFocused: Bool
+    @Environment(Workspace.self) private var workspace
 
     var body: some View {
         GeometryReader { proxy in
@@ -16,7 +18,9 @@ struct NewTabView: View {
             let tiny = size.height < 340
 
             ZStack {
-                AmbientBackground()
+                Rectangle()
+                    .fill(.background)
+                    .contextMenu { PaneContextMenu(paneID: pane.id) }
 
                 VStack(spacing: compact ? 22 : 34) {
                     if !tiny {
@@ -24,9 +28,11 @@ struct NewTabView: View {
                     }
                     searchField(compact: compact)
                     if !tiny {
-                        FavoritesGrid(compact: compact) { site in
-                            pane.load(site.url)
-                        }
+                        FavoritesGrid(
+                            compact: compact,
+                            open: { site in pane.load(site.url) },
+                            openInNewPane: { site in workspace.open(site.url, inNewPaneBeside: pane.id) }
+                        )
                     }
                 }
                 .frame(maxWidth: 620)
@@ -151,6 +157,7 @@ struct FavoriteSite: Identifiable, Hashable {
 private struct FavoritesGrid: View {
     let compact: Bool
     let open: (FavoriteSite) -> Void
+    let openInNewPane: (FavoriteSite) -> Void
 
     var body: some View {
         let tile: CGFloat = compact ? 64 : 76
@@ -164,6 +171,15 @@ private struct FavoritesGrid: View {
                 }
                 .buttonStyle(TileButtonStyle())
                 .help(site.url.absoluteString)
+                .contextMenu {
+                    Button("Open", systemImage: "arrow.up.forward.square") { open(site) }
+                    Button("Open in New Split", systemImage: "rectangle.split.2x1") { openInNewPane(site) }
+                    Divider()
+                    Button("Copy Link", systemImage: "link") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(site.url.absoluteString, forType: .string)
+                    }
+                }
             }
         }
         .frame(maxWidth: compact ? 360 : 460)
@@ -268,53 +284,30 @@ private struct ShortcutHints: View {
     }
 }
 
-// MARK: - Background
+// MARK: - Context menu
 
-/// A slowly drifting mesh gradient behind the new tab page.
-struct AmbientBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var phase = false
+/// Pane actions for right-clicking SwiftUI content (the web page builds its own).
+struct PaneContextMenu: View {
+    let paneID: PaneID
+    @Environment(Workspace.self) private var workspace
 
     var body: some View {
-        MeshGradient(
-            width: 3,
-            height: 3,
-            points: points,
-            colors: colorScheme == .dark ? Self.darkColors : Self.lightColors,
-            smoothsColors: true
-        )
-        .overlay(Color(nsColor: .windowBackgroundColor).opacity(colorScheme == .dark ? 0.25 : 0.15))
-        .onAppear {
-            withAnimation(.easeInOut(duration: 9).repeatForever(autoreverses: true)) {
-                phase = true
+        Button("Split Right", systemImage: "rectangle.split.2x1") { workspace.split(.right, from: paneID) }
+        Button("Split Down", systemImage: "rectangle.split.1x2") { workspace.split(.down, from: paneID) }
+        if workspace.paneCount > 1 {
+            Button(
+                workspace.zoomedPaneID == paneID ? "Unzoom Pane" : "Zoom Pane",
+                systemImage: workspace.zoomedPaneID == paneID
+                    ? "arrow.down.right.and.arrow.up.left"
+                    : "arrow.up.left.and.arrow.down.right"
+            ) {
+                workspace.focus(paneID)
+                workspace.toggleZoom()
             }
+            Button("Equalize Panes", systemImage: "square.grid.2x2") { workspace.equalize() }
         }
-        .accessibilityHidden(true)
+        Divider()
+        Button("Close Pane", systemImage: "xmark") { workspace.close(paneID) }
+            .disabled(workspace.paneCount == 1)
     }
-
-    private var points: [SIMD2<Float>] {
-        let drift: Float = phase ? 1 : -1
-        let leftMid: Float = 0.5 + 0.08 * drift
-        let rightMid: Float = 0.5 - 0.08 * drift
-        let centerX: Float = 0.5 + 0.12 * drift
-        let centerY: Float = 0.5 - 0.06 * drift
-        let bottomMid: Float = 0.5 - 0.1 * drift
-        return [
-            SIMD2(0, 0), SIMD2(0.5, 0), SIMD2(1, 0),
-            SIMD2(0, leftMid), SIMD2(centerX, centerY), SIMD2(1, rightMid),
-            SIMD2(0, 1), SIMD2(bottomMid, 1), SIMD2(1, 1),
-        ]
-    }
-
-    private static let lightColors: [Color] = [
-        Color(red: 0.98, green: 0.90, blue: 0.86), Color(red: 0.93, green: 0.90, blue: 0.99), Color(red: 0.86, green: 0.93, blue: 1.00),
-        Color(red: 0.99, green: 0.94, blue: 0.90), Color(red: 0.95, green: 0.95, blue: 0.99), Color(red: 0.88, green: 0.96, blue: 0.97),
-        Color(red: 0.94, green: 0.90, blue: 0.98), Color(red: 0.90, green: 0.94, blue: 1.00), Color(red: 0.93, green: 0.97, blue: 0.94),
-    ]
-
-    private static let darkColors: [Color] = [
-        Color(red: 0.11, green: 0.08, blue: 0.20), Color(red: 0.07, green: 0.09, blue: 0.20), Color(red: 0.04, green: 0.13, blue: 0.20),
-        Color(red: 0.20, green: 0.09, blue: 0.22), Color(red: 0.09, green: 0.09, blue: 0.16), Color(red: 0.05, green: 0.17, blue: 0.21),
-        Color(red: 0.09, green: 0.07, blue: 0.15), Color(red: 0.13, green: 0.07, blue: 0.19), Color(red: 0.06, green: 0.11, blue: 0.17),
-    ]
 }

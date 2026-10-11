@@ -34,6 +34,7 @@ final class Pane: Identifiable {
     private(set) var canGoForward = false
     private(set) var isSecure = false
     private(set) var themeColor: NSColor?
+    private(set) var pageBackgroundColor: NSColor?
 
     var loadError: LoadError?
 
@@ -41,7 +42,11 @@ final class Pane: Identifiable {
     private(set) var newTabFocusRequest = 0
 
     @ObservationIgnored weak var workspace: Workspace?
-    @ObservationIgnored private(set) var webView: WKWebView?
+    @ObservationIgnored private(set) var webView: FocusWebView?
+    /// The container view currently displaying `webView`. While SwiftUI animates a
+    /// layout change two containers can exist for the same pane; only this one
+    /// may hold the web view.
+    @ObservationIgnored weak var webHost: NSView?
     @ObservationIgnored private var coordinator: PaneWebCoordinator?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
 
@@ -62,6 +67,12 @@ final class Pane: Identifiable {
         if !title.isEmpty { return title }
         if let url { return AddressFormatter.displayHost(for: url) }
         return "Loading…"
+    }
+
+    /// The color the window chrome takes on so it blends with the page.
+    var chromeColor: NSColor? {
+        guard content == .web else { return nil }
+        return themeColor ?? pageBackgroundColor
     }
 
     var displayHost: String? {
@@ -120,8 +131,8 @@ final class Pane: Identifiable {
     // MARK: - Web view lifecycle
 
     @discardableResult
-    private func installWebView(configuration: WKWebViewConfiguration?) -> WKWebView {
-        let webView = WKWebView(frame: .zero, configuration: configuration ?? WebViewFactory.makeConfiguration())
+    private func installWebView(configuration: WKWebViewConfiguration?) -> FocusWebView {
+        let webView = FocusWebView(frame: .zero, configuration: configuration ?? WebViewFactory.makeConfiguration())
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
         webView.isInspectable = true
@@ -129,6 +140,10 @@ final class Pane: Identifiable {
         let coordinator = PaneWebCoordinator(pane: self)
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
+        webView.contextMenuExtender = { [weak self] menu in
+            guard let self, let workspace = self.workspace else { return }
+            workspace.appendPaneMenuItems(to: menu, for: self.id)
+        }
 
         self.webView = webView
         self.coordinator = coordinator
@@ -156,6 +171,7 @@ final class Pane: Identifiable {
             sync(\.canGoForward) { $0.canGoForward = $1 },
             sync(\.hasOnlySecureContent) { $0.isSecure = $1 },
             sync(\.themeColor) { $0.themeColor = $1 },
+            sync(\.underPageBackgroundColor) { $0.pageBackgroundColor = $1 },
         ]
     }
 
@@ -167,10 +183,35 @@ final class Pane: Identifiable {
             webView.stopLoading()
             webView.navigationDelegate = nil
             webView.uiDelegate = nil
+            webView.contextMenuExtender = nil
             webView.removeFromSuperview()
         }
         webView = nil
         coordinator = nil
+    }
+}
+
+/// A web view whose right-click menu speaks in splits instead of windows.
+final class FocusWebView: WKWebView {
+    /// Adds pane actions (split, zoom, close…) to the page's context menu.
+    var contextMenuExtender: ((NSMenu) -> Void)?
+
+    private static let newWindowTitles: [String: String] = [
+        "WKMenuItemIdentifierOpenLinkInNewWindow": "Open Link in New Split",
+        "WKMenuItemIdentifierOpenImageInNewWindow": "Open Image in New Split",
+        "WKMenuItemIdentifierOpenMediaInNewWindow": "Open Video in New Split",
+        "WKMenuItemIdentifierOpenFrameInNewWindow": "Open Frame in New Split",
+    ]
+
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        super.willOpenMenu(menu, with: event)
+        // "New Window" items go through `createWebViewWith`, which opens a split.
+        for item in menu.items {
+            if let id = item.identifier?.rawValue, let title = Self.newWindowTitles[id] {
+                item.title = title
+            }
+        }
+        contextMenuExtender?(menu)
     }
 }
 

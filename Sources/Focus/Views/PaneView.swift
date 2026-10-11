@@ -15,6 +15,13 @@ struct PaneView: View {
         RoundedRectangle(cornerRadius: PaneMetrics.cornerRadius, style: .continuous)
     }
 
+    private var dropZone: PaneDropZone? {
+        guard let drag = workspace.paneDrag, drag.target == pane.id else { return nil }
+        return drag.zone
+    }
+
+    private var isBeingDragged: Bool { workspace.paneDrag?.source == pane.id }
+
     var body: some View {
         ZStack(alignment: .top) {
             content
@@ -39,10 +46,31 @@ struct PaneView: View {
                 .strokeBorder(borderStyle, lineWidth: isFocused && !isAlone ? 2 : 1)
                 .allowsHitTesting(false)
         }
+        .overlay {
+            if let dropZone {
+                DropZoneHighlight(zone: dropZone)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .top) {
+            if !isAlone {
+                PaneGrip(paneID: pane.id)
+            }
+        }
+        .opacity(isBeingDragged ? 0.55 : 1)
+        .scaleEffect(isBeingDragged ? 0.985 : 1)
         .shadow(color: .black.opacity(isFocused && !isAlone ? 0.22 : 0.10), radius: isFocused ? 10 : 4, y: 2)
-        .background(ClickFocusMonitor { workspace.focus(pane.id) })
+        .background(
+            PaneHitArea(
+                onClick: { workspace.focus(pane.id) },
+                register: { workspace.registerPaneView($0, for: pane.id) }
+            )
+        )
         .animation(.easeOut(duration: 0.18), value: isFocused)
         .animation(.easeOut(duration: 0.2), value: pane.loadError)
+        .animation(.easeOut(duration: 0.15), value: dropZone)
+        .animation(.easeOut(duration: 0.15), value: isBeingDragged)
     }
 
     @ViewBuilder
@@ -128,6 +156,90 @@ private struct LoadErrorView: View {
                     .padding(.top, 6)
             }
             .padding(32)
+        }
+    }
+}
+
+/// The handle at the top of each pane. Drag it onto another pane to rearrange:
+/// drop on an edge to dock there, or in the middle to swap places.
+private struct PaneGrip: View {
+    let paneID: PaneID
+    @Environment(Workspace.self) private var workspace
+    @State private var isHovering = false
+
+    private var isDragging: Bool { workspace.paneDrag?.source == paneID }
+
+    var body: some View {
+        Image(systemName: "ellipsis")
+            .font(.system(size: 13, weight: .heavy))
+            .foregroundStyle(.secondary)
+            .frame(width: 44, height: 14)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
+            .opacity(isHovering || isDragging ? 1 : 0.55)
+            .scaleEffect(isHovering || isDragging ? 1.08 : 1)
+            .padding(.top, 5)
+            .overlay(
+                PaneGripArea(
+                    onHover: { hovering in
+                        withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering }
+                    },
+                    onBegin: {
+                        workspace.focus(paneID)
+                        workspace.beginPaneDrag(paneID)
+                    },
+                    onMove: { point, window in workspace.updatePaneDrag(at: point, in: window) },
+                    onEnd: { workspace.endPaneDrag() }
+                )
+                .frame(width: 64, height: 26)
+            )
+            .help("Drag to move this pane")
+            .accessibilityLabel("Move pane")
+    }
+}
+
+/// Shows where a dragged pane will land.
+private struct DropZoneHighlight: View {
+    let zone: PaneDropZone
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let rect = Self.rect(for: zone, in: size)
+            RoundedRectangle(cornerRadius: PaneMetrics.cornerRadius - 2, style: .continuous)
+                .fill(Color.accentColor.opacity(0.18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: PaneMetrics.cornerRadius - 2, style: .continuous)
+                        .strokeBorder(Color.accentColor, lineWidth: 2)
+                )
+                .overlay {
+                    Image(systemName: Self.symbol(for: zone))
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .frame(width: rect.width, height: rect.height)
+                .offset(x: rect.minX, y: rect.minY)
+        }
+        .padding(4)
+    }
+
+    static func rect(for zone: PaneDropZone, in size: CGSize) -> CGRect {
+        switch zone {
+        case .swap: CGRect(origin: .zero, size: size)
+        case .edge(.left): CGRect(x: 0, y: 0, width: size.width / 2, height: size.height)
+        case .edge(.right): CGRect(x: size.width / 2, y: 0, width: size.width / 2, height: size.height)
+        case .edge(.up): CGRect(x: 0, y: 0, width: size.width, height: size.height / 2)
+        case .edge(.down): CGRect(x: 0, y: size.height / 2, width: size.width, height: size.height / 2)
+        }
+    }
+
+    static func symbol(for zone: PaneDropZone) -> String {
+        switch zone {
+        case .swap: "arrow.left.arrow.right"
+        case .edge(.left): "arrow.left.to.line"
+        case .edge(.right): "arrow.right.to.line"
+        case .edge(.up): "arrow.up.to.line"
+        case .edge(.down): "arrow.down.to.line"
         }
     }
 }

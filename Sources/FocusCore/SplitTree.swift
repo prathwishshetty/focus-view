@@ -185,6 +185,27 @@ public struct SplitTree: Equatable, Codable, Sendable {
         }
     }
 
+    /// Exchanges the positions of two panes.
+    @discardableResult
+    public mutating func swap(_ a: PaneID, _ b: PaneID) -> Bool {
+        guard a != b, contains(a), contains(b) else { return false }
+        let placeholder = UUID()
+        replace(a, with: placeholder)
+        replace(b, with: a)
+        replace(placeholder, with: b)
+        return true
+    }
+
+    /// Moves `pane` out of its slot and docks it on the given side of `target`.
+    @discardableResult
+    public mutating func move(_ pane: PaneID, to target: PaneID, direction: SplitDirection) -> Bool {
+        guard pane != target, contains(pane), contains(target) else { return false }
+        var copy = self
+        guard copy.remove(pane) != nil, copy.split(target, direction: direction, newPane: pane) else { return false }
+        self = copy
+        return true
+    }
+
     // MARK: - Sizing
 
     /// Sets the ratio of the split with the given identifier.

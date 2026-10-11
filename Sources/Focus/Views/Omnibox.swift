@@ -3,6 +3,9 @@ import FocusCore
 import SwiftUI
 
 /// The one address field. It always reflects — and drives — the focused pane.
+///
+/// At rest it shows the page's host, centered. Clicking it (or ⌘L) switches to
+/// the full, left-aligned address with everything selected, ready to replace.
 struct Omnibox: View {
     @Environment(Workspace.self) private var workspace
     @State private var text = ""
@@ -15,47 +18,38 @@ struct Omnibox: View {
             leadingIcon(for: pane)
                 .frame(width: 16)
 
-            ZStack(alignment: .leading) {
-                TextField("Search or enter address", text: $text)
-                    .textFieldStyle(.plain)
-                    .focused($isEditing)
-                    .onSubmit(submit)
-                    .onExitCommand(perform: cancel)
-                    .opacity(isEditing ? 1 : 0)
+            TextField("Search or enter address", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: isEditing ? .regular : .medium))
+                .multilineTextAlignment(isEditing ? .leading : .center)
+                .focused($isEditing)
+                .onSubmit(submit)
+                .onExitCommand(perform: cancel)
 
-                if !isEditing {
-                    idleLabel(for: pane)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture { isEditing = true }
-                }
-            }
-            .font(.system(size: 13))
-
-            if pane.content == .web, !isEditing {
-                Button {
-                    pane.isLoading ? pane.stopLoading() : pane.reload()
-                } label: {
-                    Image(systemName: pane.isLoading ? "xmark" : "arrow.clockwise")
-                        .font(.system(size: 11, weight: .semibold))
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help(pane.isLoading ? "Stop loading (⌘.)" : "Reload (⌘R)")
-            }
+            trailingButton(for: pane)
+                .frame(width: 16)
         }
         .padding(.horizontal, 12)
-        .frame(minWidth: 260, idealWidth: 560, maxWidth: 680, minHeight: 30)
+        .frame(minWidth: 260, idealWidth: 520, maxWidth: 640, minHeight: 30)
+        .onAppear(perform: showRestingText)
         .onChange(of: workspace.addressFocusRequest) { isEditing = true }
         .onChange(of: isEditing) { _, editing in
             if editing {
                 text = AddressFormatter.editableString(for: workspace.focusedPane.content == .web ? workspace.focusedPane.url : nil)
                 selectAll()
+            } else {
+                showRestingText()
             }
         }
         .onChange(of: workspace.focusedPaneID) {
-            if isEditing { isEditing = false }
+            isEditing = false
+            showRestingText()
+        }
+        .onChange(of: pane.url) {
+            if !isEditing { showRestingText() }
+        }
+        .onChange(of: pane.content) {
+            if !isEditing { showRestingText() }
         }
     }
 
@@ -74,24 +68,28 @@ struct Omnibox: View {
         .foregroundStyle(.secondary)
     }
 
+    /// Reload/stop, or an empty slot of the same width so the resting text stays centered.
     @ViewBuilder
-    private func idleLabel(for pane: Pane) -> some View {
-        if let host = pane.displayHost {
-            HStack(spacing: 6) {
-                Text(host)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                if !pane.title.isEmpty, pane.title != host {
-                    Text(pane.title)
-                        .foregroundStyle(.secondary)
-                }
+    private func trailingButton(for pane: Pane) -> some View {
+        if pane.content == .web, !isEditing {
+            Button {
+                pane.isLoading ? pane.stopLoading() : pane.reload()
+            } label: {
+                Image(systemName: pane.isLoading ? "xmark" : "arrow.clockwise")
+                    .font(.system(size: 11, weight: .semibold))
+                    .contentTransition(.symbolEffect(.replace))
             }
-            .lineLimit(1)
-            .truncationMode(.tail)
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help(pane.isLoading ? "Stop loading (⌘.)" : "Reload (⌘R)")
         } else {
-            Text("Search or enter address")
-                .foregroundStyle(.tertiary)
+            Color.clear
         }
+    }
+
+    /// The compact form shown when not editing: just the host.
+    private func showRestingText() {
+        text = workspace.focusedPane.displayHost ?? ""
     }
 
     private func submit() {
@@ -99,10 +97,12 @@ struct Omnibox: View {
         guard !input.isEmpty else { return cancel() }
         isEditing = false
         workspace.navigate(to: input)
+        showRestingText()
     }
 
     private func cancel() {
         isEditing = false
+        showRestingText()
         workspace.focusContent()
     }
 
@@ -110,42 +110,5 @@ struct Omnibox: View {
         DispatchQueue.main.async {
             NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
         }
-    }
-}
-
-/// A miniature of the split layout. Click a cell to focus that pane.
-struct LayoutMinimap: View {
-    @Environment(Workspace.self) private var workspace
-
-    var body: some View {
-        let frames = workspace.tree.layout()
-        let size = CGSize(width: 34, height: 22)
-
-        ZStack(alignment: .topLeading) {
-            ForEach(workspace.tree.leaves, id: \.self) { id in
-                if let unit = frames[id] {
-                    let rect = CGRect(
-                        x: unit.minX * size.width,
-                        y: unit.minY * size.height,
-                        width: unit.width * size.width,
-                        height: unit.height * size.height
-                    ).insetBy(dx: 1, dy: 1)
-                    let isFocused = id == workspace.focusedPaneID
-
-                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                        .fill(isFocused ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.18)))
-                        .frame(width: max(rect.width, 1), height: max(rect.height, 1))
-                        .offset(x: rect.minX, y: rect.minY)
-                        .onTapGesture { workspace.focus(id) }
-                }
-            }
-        }
-        .frame(width: size.width, height: size.height, alignment: .topLeading)
-        .padding(.horizontal, 4)
-        .animation(Workspace.layoutAnimation, value: workspace.tree)
-        .animation(.easeOut(duration: 0.15), value: workspace.focusedPaneID)
-        .help("\(workspace.paneCount) pane\(workspace.paneCount == 1 ? "" : "s") — click to focus")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Layout: \(workspace.paneCount) panes")
     }
 }

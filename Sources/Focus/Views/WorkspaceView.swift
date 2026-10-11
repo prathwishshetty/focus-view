@@ -1,3 +1,4 @@
+import AppKit
 import FocusCore
 import SwiftUI
 
@@ -13,8 +14,10 @@ struct WorkspaceView: View {
                 .onChange(of: proxy.size) { _, size in workspace.canvasSize = size }
         }
         .padding(PaneMetrics.gap)
-        .background(WindowBackdrop())
+        .background(WindowBackdrop(color: workspace.chromeColor))
         .toolbar { toolbar }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .toolbarColorScheme(workspace.chromeColor.map { $0.isDark ? ColorScheme.dark : ColorScheme.light }, for: .windowToolbar)
         .navigationTitle(workspace.focusedPane.displayTitle)
         .onAppear {
             shortcuts.install(for: workspace)
@@ -50,12 +53,6 @@ struct WorkspaceView: View {
             Omnibox()
         }
 
-        ToolbarItem(placement: .primaryAction) {
-            LayoutMinimap()
-        }
-
-        ToolbarSpacer(.fixed, placement: .primaryAction)
-
         ToolbarItemGroup(placement: .primaryAction) {
             Button("Split Right", systemImage: "rectangle.split.2x1") { workspace.split(.right) }
                 .help("Split right (⌘D)")
@@ -73,11 +70,32 @@ struct WorkspaceView: View {
     }
 }
 
-/// Soft, translucent window background visible in the gaps between panes.
+/// The window's backdrop, behind the transparent toolbar and the gaps between panes.
+///
+/// It takes on the focused page's theme or background color, so the toolbar
+/// reads as part of the website rather than a separate bar.
 private struct WindowBackdrop: View {
+    let color: NSColor?
+
     var body: some View {
-        Rectangle()
-            .fill(.background.secondary)
-            .ignoresSafeArea()
+        ZStack {
+            Rectangle().fill(.background.secondary)
+            if let color {
+                Rectangle()
+                    .fill(Color(nsColor: color))
+                    .transition(.opacity)
+            }
+        }
+        .ignoresSafeArea()
+        .animation(.easeInOut(duration: 0.35), value: color)
+    }
+}
+
+private extension NSColor {
+    /// Whether text on top of this color should be light.
+    var isDark: Bool {
+        guard let rgb = usingColorSpace(.sRGB) else { return false }
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance < 0.5
     }
 }

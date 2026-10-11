@@ -141,6 +141,42 @@ import Testing
         #expect(abs(tree.layout()[a]!.width - SplitTree.maximumRatio) < 0.001)
     }
 
+    @Test func swapExchangesPositions() {
+        var tree = SplitTree(pane: a)
+        tree.split(a, direction: .right, newPane: b)
+        tree.split(b, direction: .down, newPane: c)
+        let before = tree.layout()
+        let swapped = tree.swap(a, c)
+        #expect(swapped)
+        #expect(tree.leaves == [c, b, a])
+        #expect(tree.layout()[c] == before[a])
+        let sameSwap = tree.swap(a, a)
+        #expect(!sameSwap)
+    }
+
+    @Test func moveDocksPaneBesideTarget() {
+        var tree = SplitTree(pane: a)
+        tree.split(a, direction: .right, newPane: b)
+        tree.split(b, direction: .right, newPane: c)
+        // a | b | c → move a below c.
+        let moved = tree.move(a, to: c, direction: .down)
+        #expect(moved)
+        #expect(tree.leaves == [b, c, a])
+        #expect(tree.neighbor(of: c, direction: .down) == a)
+        let selfMove = tree.move(b, to: b, direction: .left)
+        #expect(!selfMove)
+    }
+
+    @Test func moveWithinTwoPanesFlipsOrientation() {
+        var tree = SplitTree(pane: a)
+        tree.split(a, direction: .right, newPane: b)
+        let moved = tree.move(a, to: b, direction: .down)
+        #expect(moved)
+        #expect(tree.leaves == [b, a])
+        guard case .split(let split) = tree.root else { Issue.record("expected split"); return }
+        #expect(split.axis == .vertical)
+    }
+
     @Test func replaceKeepsLayout() {
         var tree = SplitTree(pane: a)
         tree.split(a, direction: .right, newPane: b)

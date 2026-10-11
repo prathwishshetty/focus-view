@@ -12,17 +12,22 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
 - **Splits**: split any pane right or down, drag the gaps to resize,
   double-click a gap to even it out, equalize everything, or zoom one pane to
   fill the window.
+- **Rearranging**: drag a pane by the handle at its top onto another pane. Drop
+  it on an edge to dock it on that side, or in the middle to swap the two.
 - **Focus navigation**: move between panes by direction (it uses the actual
   geometry, like Ghostty's `goto_split`) or cycle through them. Unfocused panes
   dim slightly.
-- **One omnibox** that follows focus. It accepts an address or a search and
-  understands `localhost:3000`, IP addresses, `.local` hosts and explicit
-  schemes.
-- **New tab page** with a drifting mesh-gradient background, a clock, a Liquid
-  Glass search field, favourite sites and a list of shortcuts. It adapts to
-  small panes.
-- **Layout minimap** in the toolbar showing the current split layout. Click a
-  cell to focus that pane.
+- **One omnibox** that follows focus. At rest it shows the page's host,
+  centered; click it (or press ⌘L) to edit the full address. It accepts an
+  address or a search and understands `localhost:3000`, IP addresses, `.local`
+  hosts and explicit schemes.
+- **Transparent toolbar**: the toolbar and the gaps between panes take on the
+  focused page's theme or background color, so the chrome blends with the site.
+- **Right-click menu** on pages and the new tab page with split, zoom, equalize
+  and close actions. WebKit's "Open Link in New Window" becomes "Open Link in
+  New Split".
+- **New tab page** with a clock, a Liquid Glass search field, favourite sites
+  and a list of shortcuts. It adapts to small panes.
 - `target=_blank`, `window.open` and ⌘-click open as a **new split** next to the
   current pane. ⇧⌘-click also moves focus to it.
 - Downloads go to `~/Downloads`. JavaScript alerts, confirms and prompts, file
