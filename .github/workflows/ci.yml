@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -23,7 +22,13 @@ jobs:
           swift --version
 
       - name: Build (SwiftPM)
-        run: swift build
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee build.log
+
+      - name: Warning summary
+        if: always()
+        run: grep -E "warning:" build.log | grep -v "/.build/" | sort -u || echo "No warnings"
 
       - name: Test FocusCore
         run: swift test

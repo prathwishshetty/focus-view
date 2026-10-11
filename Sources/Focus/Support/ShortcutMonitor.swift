@@ -15,10 +15,8 @@ final class ShortcutMonitor {
         self.workspace = workspace
         guard token == nil else { return }
         token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            MainActor.assumeIsolated {
-                guard let self, self.handle(event) else { return event }
-                return nil
-            }
+            let handled = MainActor.assumeIsolated { self?.handle(event) ?? false }
+            return handled ? nil : event
         }
     }
 

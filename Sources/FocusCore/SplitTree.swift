@@ -1,3 +1,6 @@
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Foundation
 
 /// Identifies a pane (a leaf) inside a ``SplitTree``.
@@ -173,7 +176,8 @@ public struct SplitTree: Equatable, Codable, Sendable {
 
     private static func replacing(_ old: PaneID, with new: PaneID, in node: SplitNode) -> SplitNode {
         switch node {
-        case .leaf(let id): id == old ? .leaf(new) : node
+        case .leaf(let id):
+            return id == old ? .leaf(new) : node
         case .split(var split):
             split.first = replacing(old, with: new, in: split.first)
             split.second = replacing(old, with: new, in: split.second)
