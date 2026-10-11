@@ -43,6 +43,19 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
 - Downloads go to `~/Downloads`. JavaScript alerts, confirms and prompts, file
   uploads, page zoom, and error pages are all handled.
 
+## Settings
+
+Focus ▸ Settings… (⌘,) opens a standard macOS settings window:
+
+- **General**: search engine; new panes open the new tab page or a homepage.
+- **Appearance**: System / Light / Dark; dim unfocused panes; outline the
+  focused pane; show or hide the clock, favorites and shortcut hints on the new
+  tab page.
+- **Websites**: default page zoom, shrink-to-fit, block pop-ups, Web Inspector,
+  and clear browsing data.
+- **Favorites**: add, edit, remove and reorder the new tab page's sites.
+- **Shortcuts**: a reference of every keyboard shortcut.
+
 ## Keyboard
 
 | Action | Shortcut |

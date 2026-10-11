@@ -41,7 +41,18 @@ final class Workspace {
         panes = [first.id: first]
         focusedPaneID = first.id
         first.workspace = self
+        if let homepage = BrowserSettings.homepageURL { first.load(homepage) }
     }
+
+    /// A fresh pane showing the new tab page, or the homepage if the user set one.
+    private func makeNewPane() -> Pane {
+        let pane = Pane(workspace: self)
+        if let homepage = BrowserSettings.homepageURL { pane.load(homepage) }
+        return pane
+    }
+
+    /// The browser window (as opposed to Settings or a panel).
+    var mainWindow: NSWindow? { canvasView?.view?.window }
 
     // MARK: - Queries
 
@@ -100,7 +111,7 @@ final class Workspace {
     /// Splits a pane (the focused one by default) and shows the new tab page in the new half.
     func split(_ direction: SplitDirection, from paneID: PaneID? = nil) {
         let target = paneID.flatMap { panes[$0] != nil ? $0 : nil } ?? focusedPaneID
-        insertPane(Pane(workspace: self), beside: target, direction: direction, focus: true)
+        insertPane(makeNewPane(), beside: target, direction: direction, focus: true)
     }
 
     /// Opens a new pane next to the focused one, along its longer side.
@@ -154,6 +165,15 @@ final class Workspace {
         close(focusedPaneID)
     }
 
+    /// ⌘W: closes the focused pane in the browser window, or any other window (Settings) itself.
+    func performCloseCommand() {
+        if let key = NSApp.keyWindow, key !== mainWindow {
+            key.performClose(nil)
+        } else {
+            closeFocusedPane()
+        }
+    }
+
     /// Closes a pane. Closing the last pane resets it to the new tab page.
     func close(_ id: PaneID) {
         guard let pane = panes[id] else { return }
@@ -170,7 +190,7 @@ final class Workspace {
 
         if tree.count == 1 {
             guard pane.content != .newTab else { return }
-            let fresh = Pane(workspace: self)
+            let fresh = makeNewPane()
             withAnimation(Self.layoutAnimation) {
                 panes[fresh.id] = fresh
                 tree.replace(id, with: fresh.id)

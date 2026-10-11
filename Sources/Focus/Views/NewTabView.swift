@@ -10,6 +10,9 @@ struct NewTabView: View {
     @State private var query = ""
     @FocusState private var isFieldFocused: Bool
     @Environment(Workspace.self) private var workspace
+    @AppStorage(BrowserSettings.Key.showClock) private var showClock = true
+    @AppStorage(BrowserSettings.Key.showFavorites) private var showFavorites = true
+    @AppStorage(BrowserSettings.Key.showShortcutHints) private var showShortcutHints = true
 
     var body: some View {
         GeometryReader { proxy in
@@ -23,15 +26,19 @@ struct NewTabView: View {
                     .contextMenu { PaneContextMenu(paneID: pane.id) }
 
                 VStack(spacing: compact ? 22 : 34) {
-                    if !tiny {
+                    if !tiny && showClock {
                         ClockHeader(compact: compact)
                     }
                     searchField(compact: compact)
-                    if !tiny {
+                    if !tiny && showFavorites && !FavoritesStore.shared.sites.isEmpty {
                         FavoritesGrid(
                             compact: compact,
-                            open: { site in pane.load(site.url) },
-                            openInNewPane: { site in workspace.open(site.url, inNewPaneBeside: pane.id) }
+                            open: { site in
+                                if let url = site.url { pane.load(url) }
+                            },
+                            openInNewPane: { site in
+                                if let url = site.url { workspace.open(url, inNewPaneBeside: pane.id) }
+                            }
                         )
                     }
                 }
@@ -39,7 +46,7 @@ struct NewTabView: View {
                 .padding(.horizontal, compact ? 20 : 40)
                 .offset(y: compact ? 0 : -24)
 
-                if !compact {
+                if !compact && showShortcutHints {
                     VStack {
                         Spacer()
                         ShortcutHints()
@@ -134,25 +141,6 @@ private struct ClockHeader: View {
 
 // MARK: - Favorites
 
-struct FavoriteSite: Identifiable, Hashable {
-    let name: String
-    let url: URL
-
-    var id: URL { url }
-    var host: String { url.host ?? name }
-
-    static let defaults: [FavoriteSite] = [
-        .init(name: "Apple", url: URL(string: "https://www.apple.com")!),
-        .init(name: "GitHub", url: URL(string: "https://github.com")!),
-        .init(name: "YouTube", url: URL(string: "https://www.youtube.com")!),
-        .init(name: "Wikipedia", url: URL(string: "https://www.wikipedia.org")!),
-        .init(name: "Hacker News", url: URL(string: "https://news.ycombinator.com")!),
-        .init(name: "Reddit", url: URL(string: "https://www.reddit.com")!),
-        .init(name: "Figma", url: URL(string: "https://www.figma.com")!),
-        .init(name: "Claude", url: URL(string: "https://claude.ai")!),
-    ]
-}
-
 private struct FavoritesGrid: View {
     let compact: Bool
     let open: (FavoriteSite) -> Void
@@ -164,19 +152,19 @@ private struct FavoritesGrid: View {
             columns: [GridItem(.adaptive(minimum: tile + 8, maximum: tile + 24), spacing: compact ? 10 : 16)],
             spacing: compact ? 12 : 18
         ) {
-            ForEach(FavoriteSite.defaults) { site in
+            ForEach(FavoritesStore.shared.sites) { site in
                 Button { open(site) } label: {
                     FavoriteTile(site: site, size: compact ? 32 : 40)
                 }
                 .buttonStyle(TileButtonStyle())
-                .help(site.url.absoluteString)
+                .help(site.url?.absoluteString ?? site.address)
                 .contextMenu {
                     Button("Open", systemImage: "arrow.up.forward.square") { open(site) }
                     Button("Open in New Split", systemImage: "rectangle.split.2x1") { openInNewPane(site) }
                     Divider()
                     Button("Copy Link", systemImage: "link") {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(site.url.absoluteString, forType: .string)
+                        NSPasteboard.general.setString(site.url?.absoluteString ?? site.address, forType: .string)
                     }
                 }
             }
@@ -281,6 +269,9 @@ private struct ShortcutHints: View {
 struct PaneContextMenu: View {
     let paneID: PaneID
     @Environment(Workspace.self) private var workspace
+    @AppStorage(BrowserSettings.Key.showClock) private var showClock = true
+    @AppStorage(BrowserSettings.Key.showFavorites) private var showFavorites = true
+    @AppStorage(BrowserSettings.Key.showShortcutHints) private var showShortcutHints = true
 
     var body: some View {
         Button("Split Right", systemImage: "rectangle.split.2x1") { workspace.split(.right, from: paneID) }

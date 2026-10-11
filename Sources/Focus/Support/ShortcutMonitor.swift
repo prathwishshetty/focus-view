@@ -36,8 +36,8 @@ final class ShortcutMonitor {
 
     private func handle(_ event: NSEvent) -> Bool {
         guard let workspace else { return false }
-        // Leave sheets, alerts and panels alone.
-        guard let window = event.window, !(window is NSPanel), window.attachedSheet == nil else { return false }
+        // Only the browser window; leave Settings, sheets, alerts and panels alone.
+        guard let window = event.window, window === workspace.mainWindow, window.attachedSheet == nil else { return false }
 
         let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
         let character = event.charactersIgnoringModifiers?.lowercased() ?? ""

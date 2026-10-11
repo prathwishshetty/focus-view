@@ -11,6 +11,11 @@ struct PaneView: View {
     @Environment(Workspace.self) private var workspace
     @Environment(\.colorScheme) private var colorScheme
     @State private var isPointerNearTop = false
+    @AppStorage(BrowserSettings.Key.dimUnfocusedPanes) private var dimUnfocusedPanes = true
+    @AppStorage(BrowserSettings.Key.showFocusRing) private var showFocusRing = true
+
+    /// Whether to draw the accent outline (only meaningful with several panes).
+    private var showsFocusRing: Bool { isFocused && !isAlone && showFocusRing }
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: PaneMetrics.cornerRadius, style: .continuous)
@@ -57,12 +62,12 @@ struct PaneView: View {
             // Unfocused splits recede slightly, like Ghostty's unfocused-split dimming.
             shape
                 .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.10))
-                .opacity(isFocused || isAlone ? 0 : 1)
+                .opacity(isFocused || isAlone || !dimUnfocusedPanes ? 0 : 1)
                 .allowsHitTesting(false)
         }
         .overlay {
             shape
-                .strokeBorder(borderStyle, lineWidth: isFocused && !isAlone ? 1.25 : 1)
+                .strokeBorder(borderStyle, lineWidth: showsFocusRing ? 1.25 : 1)
                 .opacity(isBeingDragged ? 0 : 1)
                 .allowsHitTesting(false)
         }
@@ -125,7 +130,7 @@ struct PaneView: View {
     }
 
     private var borderStyle: AnyShapeStyle {
-        if isFocused && !isAlone {
+        if showsFocusRing {
             AnyShapeStyle(Color.accentColor.opacity(0.5))
         } else {
             AnyShapeStyle(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))

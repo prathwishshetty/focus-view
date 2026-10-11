@@ -4,7 +4,13 @@ import SwiftUI
 @main
 struct FocusApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var workspace = Workspace()
+    @State private var workspace: Workspace
+
+    init() {
+        // Before anything reads a setting (the workspace's first pane does).
+        BrowserSettings.registerDefaults()
+        _workspace = State(initialValue: Workspace())
+    }
 
     var body: some Scene {
         // One window, no tabs: the workspace is the whole browser.
@@ -17,6 +23,10 @@ struct FocusApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             FocusCommands(workspace: workspace)
+        }
+
+        Settings {
+            SettingsView()
         }
     }
 }
@@ -33,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.setActivationPolicy(.regular)
         }
         NSApp.activate()
+        BrowserSettings.appearance.apply()
 
         remapWindowClose()
         NotificationCenter.default.addObserver(

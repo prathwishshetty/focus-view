@@ -77,7 +77,7 @@ final class Pane: Identifiable {
 
     /// Loads whatever the user typed: an address or a search.
     func navigate(to input: String) {
-        guard let url = AddressResolver.resolve(input, engine: Preferences.searchEngine) else { return }
+        guard let url = AddressResolver.resolve(input, engine: BrowserSettings.searchEngine) else { return }
         load(url)
     }
 
@@ -111,7 +111,7 @@ final class Pane: Identifiable {
     // MARK: - Zoom & shrink-to-fit
 
     /// The zoom the user chose with ⌘+ / ⌘-.
-    @ObservationIgnored private var userZoom: CGFloat = 1
+    @ObservationIgnored private var userZoom = CGFloat(BrowserSettings.defaultZoom)
     /// The width (CSS px) the current page needs, when it doesn't fit the pane.
     @ObservationIgnored private var requiredPageWidth: CGFloat?
     /// Pages are never shrunk below this to make them fit; past it they scroll.
@@ -144,7 +144,7 @@ final class Pane: Identifiable {
     func applyZoom() {
         guard let webView else { return }
         var zoom = userZoom
-        if let required = requiredPageWidth, required > 0, webView.bounds.width > 0 {
+        if BrowserSettings.shrinkToFit, let required = requiredPageWidth, required > 0, webView.bounds.width > 0 {
             let fit = webView.bounds.width / required
             zoom = min(userZoom, max(fit, Self.minimumFitZoom))
         }
@@ -164,7 +164,7 @@ final class Pane: Identifiable {
         let webView = FocusWebView(frame: .zero, configuration: configuration ?? WebViewFactory.makeConfiguration())
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
-        webView.isInspectable = true
+        webView.isInspectable = BrowserSettings.webInspector
 
         let coordinator = PaneWebCoordinator(pane: self)
         webView.navigationDelegate = coordinator
@@ -180,6 +180,7 @@ final class Pane: Identifiable {
         self.coordinator = coordinator
         content = .web
         observe(webView)
+        applyZoom()
         return webView
     }
 
@@ -319,13 +320,5 @@ final class PageWidthReporter: NSObject, WKScriptMessageHandler {
               let webView = message.webView as? FocusWebView,
               let width = message.body as? Double else { return }
         webView.onRequiredWidthReport?(CGFloat(width))
-    }
-}
-
-/// User-tweakable settings. A real settings UI comes later.
-enum Preferences {
-    static var searchEngine: SearchEngine {
-        let raw = UserDefaults.standard.string(forKey: "searchEngine") ?? ""
-        return SearchEngine(rawValue: raw) ?? .google
     }
 }

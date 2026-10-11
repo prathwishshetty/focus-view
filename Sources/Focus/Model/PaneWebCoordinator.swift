@@ -120,6 +120,10 @@ final class PaneWebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         guard let pane, let workspace = pane.workspace else { return nil }
+        // Link clicks always open; script-opened windows respect "Block pop-up windows".
+        if BrowserSettings.blockPopups, navigationAction.navigationType != .linkActivated {
+            return nil
+        }
         let newPane = workspace.openPopup(beside: pane.id, configuration: configuration)
         return newPane.webView
     }

@@ -13,7 +13,7 @@ struct FocusCommands: Commands {
             Button("Open Location…") { workspace.focusAddressBar() }
                 .keyboardShortcut("l")
             Divider()
-            Button("Close Pane") { workspace.closeFocusedPane() }
+            Button("Close Pane") { workspace.performCloseCommand() }
                 .keyboardShortcut("w")
         }
 
