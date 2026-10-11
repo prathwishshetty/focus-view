@@ -115,13 +115,49 @@ final class Pane: Identifiable {
         }
     }
 
-    func zoomIn() { adjustZoom(by: 0.1) }
-    func zoomOut() { adjustZoom(by: -0.1) }
-    func resetZoom() { webView?.pageZoom = 1 }
+    // MARK: - Zoom & shrink-to-fit
 
-    private func adjustZoom(by delta: CGFloat) {
+    /// The zoom the user chose with ⌘+ / ⌘-.
+    @ObservationIgnored private var userZoom: CGFloat = 1
+    /// The width (CSS px) the current page needs, when it doesn't fit the pane.
+    @ObservationIgnored private var requiredPageWidth: CGFloat?
+    /// Pages are never shrunk below this to make them fit; past it they scroll.
+    private static let minimumFitZoom: CGFloat = 0.5
+
+    func zoomIn() { setUserZoom(userZoom + 0.1) }
+    func zoomOut() { setUserZoom(userZoom - 0.1) }
+    func resetZoom() { setUserZoom(1) }
+
+    private func setUserZoom(_ zoom: CGFloat) {
+        userZoom = min(max(zoom, 0.3), 3)
+        applyZoom()
+    }
+
+    /// The page reported how wide it needs to be (0 means it fits).
+    func pageReportedRequiredWidth(_ width: CGFloat) {
+        guard width > 0 else { return }
+        requiredPageWidth = width
+        applyZoom()
+    }
+
+    /// A new page started: forget the old page's width and return to the user's zoom.
+    func pageDidCommit() {
+        requiredPageWidth = nil
+        applyZoom()
+    }
+
+    /// Sites with a fixed minimum width overflow narrow splits. Zoom them out just
+    /// enough to fit the pane, never past the user's own zoom.
+    func applyZoom() {
         guard let webView else { return }
-        webView.pageZoom = min(max(webView.pageZoom + delta, 0.3), 3)
+        var zoom = userZoom
+        if let required = requiredPageWidth, required > 0, webView.bounds.width > 0 {
+            let fit = webView.bounds.width / required
+            zoom = min(userZoom, max(fit, Self.minimumFitZoom))
+        }
+        if abs(webView.pageZoom - zoom) > 0.005 {
+            webView.pageZoom = zoom
+        }
     }
 
     func requestNewTabFocus() {
@@ -144,6 +180,8 @@ final class Pane: Identifiable {
             guard let self, let workspace = self.workspace else { return }
             workspace.appendPaneMenuItems(to: menu, for: self.id)
         }
+        webView.onResize = { [weak self] in self?.applyZoom() }
+        webView.onRequiredWidthReport = { [weak self] width in self?.pageReportedRequiredWidth(width) }
 
         self.webView = webView
         self.coordinator = coordinator
@@ -184,6 +222,8 @@ final class Pane: Identifiable {
             webView.navigationDelegate = nil
             webView.uiDelegate = nil
             webView.contextMenuExtender = nil
+            webView.onResize = nil
+            webView.onRequiredWidthReport = nil
             webView.removeFromSuperview()
         }
         webView = nil
@@ -195,6 +235,16 @@ final class Pane: Identifiable {
 final class FocusWebView: WKWebView {
     /// Adds pane actions (split, zoom, close…) to the page's context menu.
     var contextMenuExtender: ((NSMenu) -> Void)?
+    /// Called when the view's size changes (pane resized, split, window resized).
+    var onResize: (() -> Void)?
+    /// Called with the width (CSS px) the page needs to avoid scrolling sideways.
+    var onRequiredWidthReport: ((CGFloat) -> Void)?
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let changed = newSize.width != frame.size.width
+        super.setFrameSize(newSize)
+        if changed { onResize?() }
+    }
 
     private static let newWindowTitles: [String: String] = [
         "WKMenuItemIdentifierOpenLinkInNewWindow": "Open Link in New Split",
@@ -225,7 +275,58 @@ enum WebViewFactory {
         configuration.applicationNameForUserAgent = "Version/26.0 Safari/605.1.15"
         configuration.preferences.isElementFullscreenEnabled = true
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop
+        configuration.userContentController = sharedContentController
         return configuration
+    }
+
+    /// One controller for every pane (popups inherit their opener's), so the
+    /// message handler is registered exactly once.
+    private static let sharedContentController: WKUserContentController = {
+        let controller = WKUserContentController()
+        controller.addUserScript(WKUserScript(
+            source: PageWidthReporter.script,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
+        controller.add(PageWidthReporter.shared, name: PageWidthReporter.messageName)
+        return controller
+    }()
+}
+
+/// Receives each page's "I need this much width" reports and hands them to its web view.
+final class PageWidthReporter: NSObject, WKScriptMessageHandler {
+    static let shared = PageWidthReporter()
+    static let messageName = "focusPageWidth"
+
+    /// Reports the document's width when it overflows the viewport (0 when it fits),
+    /// on load, resize and layout changes, debounced.
+    static let script = """
+    (() => {
+      let last = -1, timer = null;
+      const report = () => {
+        timer = null;
+        const doc = document.documentElement;
+        if (!doc) return;
+        const width = Math.max(doc.scrollWidth, document.body ? document.body.scrollWidth : 0);
+        const value = width - doc.clientWidth > 16 ? width : 0;
+        if (value === last) return;
+        last = value;
+        window.webkit.messageHandlers.\(messageName).postMessage(value);
+      };
+      const schedule = () => { if (!timer) timer = setTimeout(report, 150); };
+      window.addEventListener('resize', schedule);
+      window.addEventListener('load', schedule);
+      window.addEventListener('pageshow', () => { last = -1; schedule(); });
+      if (window.ResizeObserver) new ResizeObserver(schedule).observe(document.documentElement);
+      schedule();
+    })();
+    """
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame,
+              let webView = message.webView as? FocusWebView,
+              let width = message.body as? Double else { return }
+        webView.onRequiredWidthReport?(CGFloat(width))
     }
 }
 

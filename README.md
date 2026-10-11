@@ -32,6 +32,9 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   New Split".
 - **New tab page** with a clock, a Liquid Glass search field, favourite sites
   (just their icons) and a list of shortcuts. It adapts to small panes.
+- **Shrink to fit**: sites with a fixed minimum width are zoomed out just enough
+  to fit a narrow split (down to 50%) instead of scrolling sideways, and zoom
+  back as the pane widens. Your own ⌘+/⌘- zoom is the upper limit.
 - `target=_blank`, `window.open` and ⌘-click open as a **new split** next to the
   current pane. ⇧⌘-click also moves focus to it.
 - Downloads go to `~/Downloads`. JavaScript alerts, confirms and prompts, file

@@ -57,7 +57,7 @@ struct PaneView: View {
         }
         .overlay {
             shape
-                .strokeBorder(borderStyle, lineWidth: isFocused && !isAlone ? 2 : 1)
+                .strokeBorder(borderStyle, lineWidth: isFocused && !isAlone ? 1.25 : 1)
                 .opacity(isBeingDragged ? 0 : 1)
                 .allowsHitTesting(false)
         }
@@ -113,7 +113,7 @@ struct PaneView: View {
 
     private var borderStyle: AnyShapeStyle {
         if isFocused && !isAlone {
-            AnyShapeStyle(Color.accentColor.opacity(0.85))
+            AnyShapeStyle(Color.accentColor.opacity(0.5))
         } else {
             AnyShapeStyle(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
         }
