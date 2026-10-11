@@ -6,7 +6,7 @@ final class ClosureMenuItem: NSMenuItem {
 
     init(_ title: String, symbol: String? = nil, handler: @escaping () -> Void) {
         self.handler = handler
-        super.init(title: title, action: #selector(perform), keyEquivalent: "")
+        super.init(title: title, action: #selector(runHandler), keyEquivalent: "")
         target = self
         if let symbol {
             image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
@@ -16,7 +16,7 @@ final class ClosureMenuItem: NSMenuItem {
     @available(*, unavailable)
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    @objc private func perform() {
+    @objc private func runHandler() {
         handler()
     }
 }
