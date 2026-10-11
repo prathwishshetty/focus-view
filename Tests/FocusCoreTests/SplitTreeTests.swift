@@ -10,7 +10,8 @@ import Testing
 
     @Test func splittingRightPlacesNewPaneAfter() {
         var tree = SplitTree(pane: a)
-        #expect(tree.split(a, direction: .right, newPane: b))
+        let result1 = tree.split(a, direction: .right, newPane: b)
+        #expect(result1)
         #expect(tree.leaves == [a, b])
         guard case .split(let split) = tree.root else { Issue.record("expected split"); return }
         #expect(split.axis == .horizontal)
@@ -26,8 +27,10 @@ import Testing
 
     @Test func splittingUnknownPaneFails() {
         var tree = SplitTree(pane: a)
-        #expect(!tree.split(b, direction: .right, newPane: c))
-        #expect(!tree.split(a, direction: .right, newPane: a))
+        let result2 = tree.split(b, direction: .right, newPane: c)
+        #expect(!result2)
+        let result3 = tree.split(a, direction: .right, newPane: a)
+        #expect(!result3)
         #expect(tree.leaves == [a])
     }
 
@@ -36,15 +39,18 @@ import Testing
         tree.split(a, direction: .right, newPane: b)
         tree.split(b, direction: .down, newPane: c)
         // a | (b / c)
-        #expect(tree.remove(b) == c)
+        let removed11 = tree.remove(b)
+        #expect(removed11 == c)
         #expect(tree.leaves == [a, c])
-        #expect(tree.remove(c) == a)
+        let removed12 = tree.remove(c)
+        #expect(removed12 == a)
         #expect(tree.root == .leaf(a))
     }
 
     @Test func lastPaneCannotBeRemoved() {
         var tree = SplitTree(pane: a)
-        #expect(tree.remove(a) == nil)
+        let removed13 = tree.remove(a)
+        #expect(removed13 == nil)
         #expect(tree.leaves == [a])
     }
 
@@ -53,7 +59,8 @@ import Testing
         tree.split(a, direction: .down, newPane: b)
         tree.split(a, direction: .right, newPane: c)
         // (a | c) / b
-        #expect(tree.remove(b) == c)
+        let removed14 = tree.remove(b)
+        #expect(removed14 == c)
     }
 
     @Test func layoutDividesSpace() {
@@ -115,12 +122,15 @@ import Testing
         var tree = SplitTree(pane: a)
         tree.split(a, direction: .right, newPane: b)
         tree.split(b, direction: .down, newPane: c)
-        #expect(tree.resize(c, direction: .right, by: 0.1))
+        let result4 = tree.resize(c, direction: .right, by: 0.1)
+        #expect(result4)
         #expect(abs(tree.layout()[a]!.width - 0.6) < 0.001)
-        #expect(tree.resize(c, direction: .up, by: 0.1))
+        let result5 = tree.resize(c, direction: .up, by: 0.1)
+        #expect(result5)
         #expect(abs(tree.layout()[b]!.height - 0.4) < 0.001)
         // No vertical split above `a`.
-        #expect(!tree.resize(a, direction: .down, by: 0.1))
+        let result6 = tree.resize(a, direction: .down, by: 0.1)
+        #expect(!result6)
     }
 
     @Test func ratiosAreClamped() {
