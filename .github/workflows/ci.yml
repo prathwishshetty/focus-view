@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & test (macOS 26)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build (SwiftPM)
+        run: swift build
+
+      - name: Test FocusCore
+        run: swift test
+
+      - name: Bundle Focus.app
+        run: scripts/bundle.sh debug
+
+      - name: Build Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -project Focus.xcodeproj -scheme Focus -configuration Debug \
+            -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
