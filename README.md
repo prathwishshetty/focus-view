@@ -46,6 +46,13 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
 - **Back/forward history**: press and hold the back or forward button to see
   the pane's history and jump straight to any page. History ▸ Recently Visited
   lists the last pages you opened.
+- **Full history** at `focus://history` (History ▸ Show Full History, ⌘Y): every
+  page you've visited, grouped by day ("Today", "Yesterday", …) with the time of
+  each visit, like Chrome's history page. Search it, use a row's ⋮ menu to open
+  it in a new split, copy its link, see more from that site or remove it, check
+  several rows to delete them at once, or clear everything. ⌘-click a page to
+  open it in a split. It opens in an empty pane, or in a new split beside the
+  current page.
 - **Transparent toolbar** over the window background, which follows the
   system's light or dark appearance.
 - **Right-click menu** on pages and the new tab page with split, zoom, equalize
@@ -96,6 +103,7 @@ Focus ▸ Settings… (⌘,) opens a standard macOS settings window:
 | Find in page / next / previous | ⌘F / ⌘G / ⇧⌘G |
 | Reader mode | ⇧⌘R |
 | Back / forward | ⌘[ / ⌘] (hold the buttons for history) |
+| Show full history (`focus://history`) | ⌘Y |
 | Reload / hard reload / stop | ⌘R / ⌥⌘R / ⌘. |
 | Page zoom in / out / reset | ⌘= / ⌘- / ⌘0 |
 
@@ -116,13 +124,14 @@ swift run     # quick start as a bare executable
 Sources/FocusCore/      Platform-independent logic (unit tested)
   SplitTree.swift       Binary split tree: split, close, resize, equalize, spatial navigation
   AddressResolver.swift Address vs. search detection, search engines and their suggestions, URL display
-  BrowsingHistory.swift Visit history: one entry per address, visit counts, size limit
+  BrowsingHistory.swift Visit history: one entry per address, visit counts, the days it was visited, size limit
   SuggestionMatcher.swift  Ranks history and favorites against what's typed
   FuzzyMatcher.swift    Fuzzy matching for the command palette
 Sources/Focus/
   App/                  App entry point, menu commands
   Model/                Workspace (tree + focus + zoom), Pane (owns its WKWebView), WebKit delegates,
-                        history store, omnibox and palette models, find-in-page and reader mode
+                        history store and the focus://history page, omnibox and palette models,
+                        find-in-page and reader mode
   Views/                Split rendering, pane cards, omnibox and suggestions, command palette, new tab page
   Settings/             Settings window and stored preferences
   Support/              Keyboard shortcut routing
@@ -148,7 +157,6 @@ Candidate features, roughly grouped. None of these are built yet.
 
 ### Address bar & navigation
 - **Search shortcuts**: `w swift` searches Wikipedia, `gh focus` searches GitHub, and so on.
-- **History window**: browse and search everything you've visited, grouped by day, and remove entries.
 - **Reader mode settings**: font, text size and theme controls, and saving articles to read later.
 
 ### Privacy & security

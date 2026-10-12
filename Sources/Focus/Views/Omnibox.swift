@@ -81,6 +81,8 @@ struct Omnibox: View {
         Group {
             if isEditing || pane.content == .newTab {
                 Image(systemName: "magnifyingglass")
+            } else if FocusPages.isHistory(pane.url) {
+                Image(systemName: "clock.arrow.circlepath")
             } else if pane.isSecure, pane.url?.scheme == "https" {
                 Image(systemName: "lock.fill")
             } else {

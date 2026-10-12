@@ -48,6 +48,55 @@ import Testing
         history.updateTitle("Page", for: URL(string: "https://a.com/page")!)
         #expect(history.entries[0].title == "Page")
     }
+
+    var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    @Test func keepsTheLatestVisitOfEachDay() {
+        var history = BrowsingHistory()
+        let a = URL(string: "https://a.com")!
+        history.recordVisit(to: a, title: "A", at: start, calendar: utc)
+        history.recordVisit(to: a, title: "A", at: start + 600, calendar: utc)
+        history.recordVisit(to: a, title: "A", at: start + 86_400, calendar: utc)
+
+        #expect(history.entries[0].visits == [start + 86_400, start + 600])
+        #expect(history.entries[0].visitCount == 3)
+    }
+
+    @Test func listsVisitsNewestFirst() {
+        var history = BrowsingHistory()
+        history.recordVisit(to: URL(string: "https://a.com")!, title: "A", at: start, calendar: utc)
+        history.recordVisit(to: URL(string: "https://b.com")!, title: "B", at: start + 60, calendar: utc)
+        history.recordVisit(to: URL(string: "https://a.com")!, title: "A", at: start + 86_400, calendar: utc)
+
+        #expect(history.visits.map(\.title) == ["A", "B", "A"])
+        #expect(history.visits.map(\.date) == [start + 86_400, start + 60, start])
+    }
+
+    @Test func removingOneDayKeepsTheOthers() {
+        var history = BrowsingHistory()
+        history.recordVisit(to: URL(string: "https://a.com")!, title: "A", at: start, calendar: utc)
+        history.recordVisit(to: URL(string: "https://b.com")!, title: "B", at: start + 60, calendar: utc)
+        history.recordVisit(to: URL(string: "https://a.com")!, title: "A", at: start + 86_400, calendar: utc)
+
+        history.removeVisit(to: "https://a.com", onSameDayAs: start + 86_400 + 30, calendar: utc)
+        #expect(history.entries.map(\.url) == ["https://b.com", "https://a.com"])
+        #expect(history.entries[1].visits == [start])
+        #expect(history.entries[1].lastVisited == start)
+
+        history.removeVisit(to: "https://a.com", onSameDayAs: start, calendar: utc)
+        #expect(history.entries.map(\.url) == ["https://b.com"])
+    }
+
+    @Test func readsHistorySavedWithoutVisits() throws {
+        let json = #"{"limit":5000,"entries":[{"url":"https://a.com","title":"A","visitCount":2,"lastVisited":800000000}]}"#
+        let history = try JSONDecoder().decode(BrowsingHistory.self, from: Data(json.utf8))
+        #expect(history.entries[0].visits == [start])
+        #expect(history.visits.map(\.url) == ["https://a.com"])
+    }
 }
 
 @Suite struct SuggestionMatcherTests {

@@ -90,6 +90,7 @@ final class ShortcutMonitor {
             case "r": workspace.reload()
             case "[": workspace.goBack()
             case "]": workspace.goForward()
+            case "y": workspace.showHistory()
             case ".": workspace.stopLoading()
             case "=", "+": workspace.zoomIn()
             case "-": workspace.zoomOut()

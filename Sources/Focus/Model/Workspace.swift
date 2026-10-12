@@ -193,6 +193,22 @@ final class Workspace {
         if restoringFocus { focusContent() }
     }
 
+    // MARK: - History
+
+    /// Opens focus://history: where it's already open, in the focused pane when
+    /// that's empty, or else in a new split beside it.
+    func showHistory() {
+        hidePalette(restoringFocus: false)
+        if let pane = tree.leaves.compactMap({ panes[$0] }).first(where: { FocusPages.isHistory($0.url) && $0.content == .web }) {
+            focus(pane.id)
+            focusContent()
+        } else if focusedPane.content == .newTab {
+            open(FocusPages.history, inNewPane: false)
+        } else {
+            open(FocusPages.history, inNewPaneBeside: focusedPaneID)
+        }
+    }
+
     // MARK: - Find & reader
 
     func showFindBar() {

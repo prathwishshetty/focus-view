@@ -180,6 +180,8 @@ final class CommandPaletteModel {
             command("Reload Page From Origin", "arrow.clockwise", "⌥⌘R", keywords: "hard refresh cache", when: isWeb) {
                 workspace.reload(fromOrigin: true)
             },
+            command("Show Full History", "clock.arrow.circlepath", "⌘Y", keywords: "visited pages focus://history",
+                    restoresFocus: false) { workspace.showHistory() },
             command("Copy Page Link", "doc.on.doc", keywords: "url address clipboard", when: isWeb) { workspace.copyPageLink() },
             command(workspace.isZoomed ? "Restore Pane Size" : "Maximize Pane",
                     workspace.isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",

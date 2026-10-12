@@ -15,6 +15,7 @@ import Testing
         ("about:blank", "about:blank"),
         ("  github.com/anthropics  ", "https://github.com/anthropics"),
         ("user@example.com", "https://user@example.com"),
+        ("focus://history", "focus://history"),
     ])
     func resolvesAddresses(input: String, expected: String) {
         #expect(AddressResolver.resolve(input)?.absoluteString == expected)
@@ -50,5 +51,6 @@ import Testing
         #expect(AddressFormatter.displayHost(for: URL(string: "https://www.apple.com/mac/")!) == "apple.com")
         #expect(AddressFormatter.displayHost(for: URL(string: "https://news.ycombinator.com")!) == "news.ycombinator.com")
         #expect(AddressFormatter.editableString(for: URL(string: "about:blank")) == "")
+        #expect(AddressFormatter.displayHost(for: URL(string: "focus://history")!) == "focus://history")
     }
 }

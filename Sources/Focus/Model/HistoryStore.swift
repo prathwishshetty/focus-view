@@ -31,6 +31,9 @@ final class HistoryStore {
 
     var entries: [HistoryEntry] { history.entries }
 
+    /// Every page once per day it was visited, newest first (focus://history).
+    var visits: [HistoryVisit] { history.visits }
+
     func recordVisit(_ url: URL, title: String) {
         guard history.recordVisit(to: url, title: title) else { return }
         scheduleSave()
@@ -40,6 +43,13 @@ final class HistoryStore {
         let before = history
         history.updateTitle(title, for: url)
         if history != before { scheduleSave() }
+    }
+
+    /// Removes rows of the history page: each page's visit on that day.
+    func removeVisits(_ rows: [(url: String, date: Date)]) {
+        guard !rows.isEmpty else { return }
+        for row in rows { history.removeVisit(to: row.url, onSameDayAs: row.date) }
+        scheduleSave()
     }
 
     func clear() {
@@ -57,15 +67,19 @@ final class HistoryStore {
         return visited + favorites
     }
 
-    /// Asks before clearing; used from the History menu.
-    func confirmAndClear() {
+    /// Asks before clearing; used from the History menu and the history page.
+    /// Returns whether history was cleared.
+    @discardableResult
+    func confirmAndClear() -> Bool {
         let alert = NSAlert()
         alert.messageText = "Clear browsing history?"
         alert.informativeText = "This removes every page from your history and address bar suggestions."
         alert.addButton(withTitle: "Clear History")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
-        if alert.runModal() == .alertFirstButtonReturn { clear() }
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        clear()
+        return true
     }
 
     // MARK: - Saving
