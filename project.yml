@@ -24,7 +24,10 @@ targets:
   Focus:
     type: application
     platform: macOS
-    sources: [Sources/Focus]
+    sources:
+      - Sources/Focus
+      - path: Support/AppIcon.icns
+        buildPhase: resources
     dependencies:
       - target: FocusCore
     settings:

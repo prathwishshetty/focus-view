@@ -218,4 +218,4 @@ Candidate features, roughly grouped. None of these are built yet.
 - **Animated focus transitions** and an optional "spotlight" mode that blurs unfocused panes.
 - **Pane labels on hover** showing the site and title for unfocused panes.
 - **Per-site zoom memory** so a site keeps the zoom you last used.
-- **App icon** and an onboarding page explaining splits and shortcuts.
+- **Onboarding page** explaining splits and shortcuts.

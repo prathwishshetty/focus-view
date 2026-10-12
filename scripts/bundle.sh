@@ -33,6 +33,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/Focus" "$APP/Contents/MacOS/Focus"
 cp "$ROOT/Support/Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/Support/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 if [[ -z "$IDENTITY" ]]; then
