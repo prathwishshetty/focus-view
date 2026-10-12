@@ -1,0 +1,14 @@
+// Build settings for the Focus app target in Focus.xcodeproj.
+//
+// By default Focus is signed to run on this Mac only. That's enough to use it,
+// but passkeys and security keys need it signed by your Apple Developer team:
+// copy Signing.local.xcconfig.example to Signing.local.xcconfig (git-ignored)
+// and fill it in. See "Signing and passkeys" in the README.
+
+PRODUCT_BUNDLE_IDENTIFIER = dev.focusview.Focus
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+CODE_SIGN_ENTITLEMENTS = Support/Focus.entitlements
+
+#include? "Signing.local.xcconfig"

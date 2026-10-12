@@ -3,6 +3,6 @@
 build/
 DerivedData/
 .swiftpm/
-*.xcodeproj/
 xcuserdata/
 signing.env
+Support/Signing.local.xcconfig

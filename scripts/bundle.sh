@@ -36,13 +36,16 @@ cp "$ROOT/Support/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/Support/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+PLISTBUDDY=/usr/libexec/PlistBuddy
+# Info.plist leaves the bundle identifier to the build (Xcode fills it in).
+"$PLISTBUDDY" -c "Set :CFBundleIdentifier dev.focusview.Focus" "$APP/Contents/Info.plist"
+
 if [[ -z "$IDENTITY" ]]; then
     codesign --force --sign - --timestamp=none "$APP" >/dev/null
     echo "Built $APP (ad-hoc signed: passkeys are unavailable; see signing.env.example)"
     exit 0
 fi
 
-PLISTBUDDY=/usr/libexec/PlistBuddy
 ENTITLEMENTS="$ROOT/build/Focus.entitlements"
 cp "$ROOT/Support/Focus.entitlements" "$ENTITLEMENTS"
 

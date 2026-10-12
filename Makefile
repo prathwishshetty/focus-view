@@ -12,10 +12,8 @@ app:
 run: app
 	open build/Focus.app
 
-# Generates Focus.xcodeproj (requires `brew install xcodegen`).
 xcode:
-	xcodegen generate
 	open Focus.xcodeproj
 
 clean:
-	rm -rf .build build Focus.xcodeproj
+	rm -rf .build build
