@@ -51,6 +51,8 @@ struct WorkspaceView: View {
         ToolbarItem(placement: .principal) {
             Omnibox()
         }
+        // The field draws its own backdrop, so its suggestions can continue it.
+        .sharedBackgroundVisibility(.hidden)
 
         if !workspace.minimizedPanes.isEmpty {
             ToolbarItem(placement: .primaryAction) {

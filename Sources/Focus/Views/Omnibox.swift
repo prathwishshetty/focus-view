@@ -23,9 +23,12 @@ struct Omnibox: View {
         let pane = workspace.focusedPane
         @Bindable var model = workspace.omnibox
 
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
+            // While editing the text starts right after the icon; at rest the
+            // sides stay equal so the host is centered.
             leadingIcon(for: pane)
-                .frame(width: Self.sideWidth, alignment: .leading)
+                .frame(width: OmniboxMetrics.iconWidth)
+                .frame(width: isEditing ? OmniboxMetrics.iconWidth : Self.sideWidth, alignment: .leading)
 
             ZStack {
                 AddressField(
@@ -45,11 +48,22 @@ struct Omnibox: View {
             }
             .frame(maxWidth: .infinity)
 
-            trailingButtons(for: pane)
-                .frame(width: Self.sideWidth, alignment: .trailing)
+            if !isEditing {
+                trailingButtons(for: pane)
+                    .frame(width: Self.sideWidth, alignment: .trailing)
+            }
         }
-        .padding(.horizontal, 12)
-        .frame(minWidth: 260, idealWidth: 520, maxWidth: 640, minHeight: 30)
+        .padding(.horizontal, OmniboxMetrics.inset)
+        .frame(minWidth: 260, idealWidth: 520, maxWidth: 640)
+        .frame(height: OmniboxMetrics.height)
+        .background {
+            // With suggestions showing, the field's bottom edge opens into the list.
+            OmniboxSurface(
+                topRadius: OmniboxMetrics.radius,
+                bottomRadius: model.isShowingSuggestions ? 0 : OmniboxMetrics.radius,
+                openEdge: model.isShowingSuggestions ? .bottom : nil
+            )
+        }
         .background(RegisteringArea { workspace.registerOmniboxView($0) })
         .onChange(of: workspace.addressFocusRequest) { beginEditing() }
         .onChange(of: model.text) {
@@ -296,10 +310,15 @@ struct OmniboxSuggestionList: View {
     var body: some View {
         let model = workspace.omnibox
         if model.isShowingSuggestions {
+            // Hang from the field: same width, flush with its bottom edge, so the
+            // two read as one surface. The field sits in the toolbar, above the
+            // pane area, so its bottom is usually at a negative y here.
             let anchor = workspace.omniboxFrameInCanvas()
-            let width = min(max(anchor?.width ?? 520, 440), canvasSize.width - 16)
-            let midX = anchor?.midX ?? canvasSize.width / 2
-            let x = min(max(midX - width / 2, 8), canvasSize.width - width - 8)
+            let width = anchor?.width ?? min(520, canvasSize.width - 16)
+            let x = anchor?.minX ?? (canvasSize.width - width) / 2
+            let top = anchor?.maxY ?? 6
+            // Start the rows below the toolbar, which would otherwise take their clicks.
+            let rowsInset = max(OmniboxMetrics.listPadding, -top)
 
             VStack(spacing: 2) {
                 ForEach(Array(model.suggestions.enumerated()), id: \.element.id) { index, suggestion in
@@ -316,13 +335,24 @@ struct OmniboxSuggestionList: View {
                         )
                 }
             }
-            .padding(6)
+            .padding(OmniboxMetrics.listPadding)
+            .padding(.top, rowsInset - OmniboxMetrics.listPadding)
             .frame(width: width)
-            .floatingPanel(cornerRadius: 14)
+            .background {
+                OmniboxSurface(topRadius: 0, bottomRadius: OmniboxMetrics.listRadius, openEdge: .top)
+                    .shadow(color: .black.opacity(0.22), radius: 24, y: 12)
+            }
+            .overlay(alignment: .top) {
+                // A faint seam between what you typed and the suggestions.
+                Rectangle()
+                    .fill(Color.primary.opacity(0.08))
+                    .frame(height: 1)
+                    .padding(.horizontal, OmniboxMetrics.inset)
+            }
             .background(RegisteringArea { workspace.registerSuggestionsView($0) })
             // Real layout (not an offset), so the click areas' AppKit views land in the right place.
             .padding(.leading, x)
-            .padding(.top, max((anchor?.maxY ?? 0) + 6, 6))
+            .padding(.top, top)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .transition(.opacity)
         }
@@ -389,6 +419,92 @@ private struct SuggestionRow: View {
         case .favorite: "Favorite"
         case .history, .search, .address: nil
         }
+    }
+}
+
+/// Sizes shared by the address field and the suggestion list hanging from it,
+/// chosen so the field's icon and text line up with the rows' icons and titles.
+enum OmniboxMetrics {
+    static let height: CGFloat = 34
+    static let radius: CGFloat = height / 2
+    /// The field's side padding: a row's own padding plus the list's.
+    static let inset: CGFloat = listPadding + 10
+    static let iconWidth: CGFloat = 16
+    static let listPadding: CGFloat = 6
+    /// Concentric with the rows' 8pt corners.
+    static let listRadius: CGFloat = 14
+}
+
+/// The address field's backdrop, and the list's. An open edge drops that side
+/// of the hairline outline, so the field and the list stacked edge to edge
+/// read as one shape.
+private struct OmniboxSurface: View {
+    let topRadius: CGFloat
+    let bottomRadius: CGFloat
+    let openEdge: VerticalEdge?
+
+    var body: some View {
+        RoundedSegment(topRadius: topRadius, bottomRadius: bottomRadius)
+            .fill(Color(nsColor: .controlBackgroundColor))
+            .overlay(
+                RoundedSegment(topRadius: topRadius, bottomRadius: bottomRadius, openEdge: openEdge, inset: 0.5)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+            )
+    }
+}
+
+/// A rectangle with its own corner radius at the top and at the bottom. With an
+/// `openEdge` it's only the outline, without that edge (for stroking).
+private struct RoundedSegment: Shape {
+    var topRadius: CGFloat
+    var bottomRadius: CGFloat
+    var openEdge: VerticalEdge? = nil
+    /// Pulls the closed edges in, so a stroke stays inside the shape.
+    var inset: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        var r = rect.insetBy(dx: inset, dy: inset)
+        // The open edge stays at the boundary, so the side lines meet the neighbor's.
+        switch openEdge {
+        case .top?: r = CGRect(x: r.minX, y: rect.minY, width: r.width, height: r.maxY - rect.minY)
+        case .bottom?: r = CGRect(x: r.minX, y: r.minY, width: r.width, height: rect.maxY - r.minY)
+        case nil: break
+        }
+        let limit = min(r.width, r.height) / 2
+        let top = min(topRadius, limit)
+        let bottom = min(bottomRadius, limit)
+        let topLeft = CGPoint(x: r.minX, y: r.minY), topRight = CGPoint(x: r.maxX, y: r.minY)
+        let bottomRight = CGPoint(x: r.maxX, y: r.maxY), bottomLeft = CGPoint(x: r.minX, y: r.maxY)
+
+        var path = Path()
+        func corner(_ point: CGPoint, toward next: CGPoint, radius: CGFloat) {
+            if radius > 0 {
+                path.addArc(tangent1End: point, tangent2End: next, radius: radius)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+        // Clockwise, starting just after the open edge.
+        switch openEdge {
+        case .bottom?:
+            path.move(to: bottomLeft)
+            corner(topLeft, toward: topRight, radius: top)
+            corner(topRight, toward: bottomRight, radius: top)
+            path.addLine(to: bottomRight)
+        case .top?:
+            path.move(to: topRight)
+            corner(bottomRight, toward: bottomLeft, radius: bottom)
+            corner(bottomLeft, toward: topLeft, radius: bottom)
+            path.addLine(to: topLeft)
+        case nil:
+            path.move(to: CGPoint(x: r.midX, y: r.minY))
+            corner(topRight, toward: bottomRight, radius: top)
+            corner(bottomRight, toward: bottomLeft, radius: bottom)
+            corner(bottomLeft, toward: topLeft, radius: bottom)
+            corner(topLeft, toward: topRight, radius: top)
+            path.closeSubpath()
+        }
+        return path
     }
 }
 
