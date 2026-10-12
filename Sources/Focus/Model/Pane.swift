@@ -404,7 +404,10 @@ final class Pane: Identifiable {
     private func observe(_ webView: WKWebView) {
         // WebKit posts these on the main thread.
         func sync<Value>(_ keyPath: KeyPath<WKWebView, Value>, _ apply: @escaping (Pane, Value) -> Void) -> NSKeyValueObservation {
-            webView.observe(keyPath, options: [.initial, .new]) { [weak self] webView, _ in
+            // Key paths are immutable, so sharing one with the observer is safe even
+            // though `KeyPath` isn't marked Sendable.
+            nonisolated(unsafe) let keyPath = keyPath
+            return webView.observe(keyPath, options: [.initial, .new]) { [weak self] webView, _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     apply(self, webView[keyPath: keyPath])
