@@ -9,12 +9,14 @@ import SwiftUI
 /// suggestions from history, favorites and the search engine appear below it
 /// (see ``OmniboxSuggestionList``).
 ///
-/// The field itself is always left-aligned and visible (an invisible field can't
-/// take focus); at rest it's empty and a centered label is drawn over it. Flipping
-/// the field's own alignment would leave the cursor stranded in the middle.
+/// The text field only exists while editing. At rest there's just a label, so
+/// the window can never hand the field keyboard focus behind your back (which
+/// left a blinking caret next to the host while you were reading a page).
 struct Omnibox: View {
     @Environment(Workspace.self) private var workspace
-    @FocusState private var isEditing: Bool
+    /// Whether the text field is shown (editing has begun).
+    @State private var isEditing = false
+    @FocusState private var isFieldFocused: Bool
 
     var body: some View {
         let pane = workspace.focusedPane
@@ -23,20 +25,25 @@ struct Omnibox: View {
         HStack(spacing: 8) {
             leadingIcon(for: pane)
                 .frame(width: Self.sideWidth, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: beginEditing)
 
             ZStack {
-                TextField("", text: $model.text, prompt: Text(isEditing ? "Search or enter address" : ""))
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .focused($isEditing)
-                    .onSubmit(submit)
-                    .onExitCommand(perform: cancel)
-
-                if !isEditing {
+                if isEditing {
+                    TextField("", text: $model.text, prompt: Text("Search or enter address"))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .focused($isFieldFocused)
+                        .onSubmit(submit)
+                        .onExitCommand(perform: cancel)
+                } else {
                     restingLabel(for: pane)
-                        .allowsHitTesting(false)
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: beginEditing)
                 }
             }
+            .frame(maxWidth: .infinity)
 
             trailingButtons(for: pane)
                 .frame(width: Self.sideWidth, alignment: .trailing)
@@ -44,26 +51,47 @@ struct Omnibox: View {
         .padding(.horizontal, 12)
         .frame(minWidth: 260, idealWidth: 520, maxWidth: 640, minHeight: 30)
         .background(RegisteringArea { workspace.registerOmniboxView($0) })
-        .onChange(of: workspace.addressFocusRequest) { isEditing = true }
-        .onChange(of: isEditing) { _, editing in
-            if editing {
-                let pane = workspace.focusedPane
-                model.beginEditing(with: AddressFormatter.editableString(for: pane.content == .web ? pane.url : nil))
-                selectAll()
-            } else {
-                model.endEditing()
-            }
+        .onChange(of: workspace.addressFocusRequest) { beginEditing() }
+        .onChange(of: isFieldFocused) { _, focused in
+            // Clicking a page (or anywhere else) ends editing.
+            if !focused, isEditing { endEditing() }
         }
         .onChange(of: model.text) {
             model.textDidChange()
         }
         .onChange(of: model.isEditing) { _, editing in
             // The model ends editing on its own when a suggestion is opened.
-            if !editing, isEditing { isEditing = false }
+            if !editing, isEditing { endEditing() }
         }
         .onChange(of: workspace.focusedPaneID) {
-            isEditing = false
+            if isEditing { endEditing() }
         }
+    }
+
+    private func beginEditing() {
+        guard !isEditing else {
+            isFieldFocused = true
+            selectAll()
+            return
+        }
+        let pane = workspace.focusedPane
+        workspace.omnibox.beginEditing(with: AddressFormatter.editableString(for: pane.content == .web ? pane.url : nil))
+        isEditing = true
+        // The field appears on the next pass; focus it once it's there.
+        DispatchQueue.main.async {
+            isFieldFocused = true
+            selectAll()
+        }
+        // If it never got focus (the window wasn't key, say), go back to rest.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            if isEditing, !isFieldFocused { endEditing() }
+        }
+    }
+
+    private func endEditing() {
+        isFieldFocused = false
+        isEditing = false
+        workspace.omnibox.endEditing()
     }
 
     /// Room on each side of the field, kept equal so the resting host stays centered.
@@ -137,11 +165,11 @@ struct Omnibox: View {
         let model = workspace.omnibox
         guard !model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return cancel() }
         workspace.submitAddressBar()
-        isEditing = false
+        endEditing()
     }
 
     private func cancel() {
-        isEditing = false
+        endEditing()
         workspace.focusContent()
     }
 
