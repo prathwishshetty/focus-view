@@ -27,7 +27,6 @@ struct NewTabView: View {
                     if !tiny && showClock {
                         ClockHeader(compact: compact)
                     }
-                    searchField(compact: compact)
                     if !tiny && showFavorites && !FavoritesStore.shared.sites.isEmpty {
                         FavoritesGrid(
                             compact: compact,
@@ -55,42 +54,6 @@ struct NewTabView: View {
             }
             .frame(width: size.width, height: size.height)
         }
-    }
-
-    /// Looks like a search field, but typing happens in the address bar at the
-    /// top (which has suggestions); clicking here just sends you there.
-    private func searchField(compact: Bool) -> some View {
-        let isTypingAbove = isFocused && workspace.omnibox.isEditing
-        return Button {
-            workspace.editAddress(of: pane.id)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: compact ? 15 : 17, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Text(isTypingAbove ? "Type in the address bar above" : "Search or enter address")
-                    .font(.system(size: compact ? 15 : 18))
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.opacity)
-                Spacer(minLength: 8)
-                Text(isTypingAbove ? "↑" : "⌘L")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-            }
-            .padding(.horizontal, 20)
-            .frame(height: compact ? 44 : 54)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
-        .opacity(isTypingAbove ? 0.6 : 1)
-        .animation(.easeOut(duration: 0.18), value: isTypingAbove)
-        .pointerStyle(.link)
-        .help("Search or enter an address (⌘L)")
     }
 }
 

@@ -117,16 +117,6 @@ final class Workspace {
         if let id = tree.previous(before: focusedPaneID) { focus(id) }
     }
 
-    /// Focuses `id` (if needed) and starts editing its address in the address bar.
-    func editAddress(of id: PaneID) {
-        if focusedPaneID != id {
-            // Focusing an empty pane already puts the cursor in the address bar.
-            focus(id)
-        } else {
-            focusAddressBar()
-        }
-    }
-
     func focusAddressBar() {
         hidePalette(restoringFocus: false)
         addressFocusRequest &+= 1

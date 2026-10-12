@@ -52,9 +52,8 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   and close actions. WebKit's "Open Link in New Window" becomes "Open Link in
   New Split".
 - **New tab page** with a clock, favourite sites (just their icons) and a list
-  of shortcuts. It adapts to small panes. A new empty pane puts the cursor in
-  the address bar at the top, so its suggestions are right there; the search
-  box in the middle of the page takes you there too.
+  of shortcuts. It adapts to small panes. There's one place to type, the
+  address bar at the top: a new empty pane puts the cursor there.
 - **Shrink to fit**: sites with a fixed minimum width are zoomed out just enough
   to fit a narrow split (down to 50%) instead of scrolling sideways, and zoom
   back as the pane widens. Your own ⌘+/⌘- zoom is the upper limit.

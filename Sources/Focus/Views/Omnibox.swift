@@ -9,14 +9,15 @@ import SwiftUI
 /// suggestions from history, favorites and the search engine appear below it
 /// (see ``OmniboxSuggestionList``).
 ///
-/// The text field only exists while editing. At rest there's just a label, so
-/// the window can never hand the field keyboard focus behind your back (which
-/// left a blinking caret next to the host while you were reading a page).
+/// Editing state lives on ``OmniboxModel``; the field itself is AppKit (see
+/// ``AddressField``) so it takes clicks reliably in the toolbar and refuses
+/// keyboard focus while at rest.
 struct Omnibox: View {
     @Environment(Workspace.self) private var workspace
-    /// Whether the text field is shown (editing has begun).
-    @State private var isEditing = false
-    @FocusState private var isFieldFocused: Bool
+    /// Bumped to put the keyboard in the field and select its text.
+    @State private var focusRequest = 0
+
+    private var isEditing: Bool { workspace.omnibox.isEditing }
 
     var body: some View {
         let pane = workspace.focusedPane
@@ -25,22 +26,21 @@ struct Omnibox: View {
         HStack(spacing: 8) {
             leadingIcon(for: pane)
                 .frame(width: Self.sideWidth, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture(perform: beginEditing)
 
             ZStack {
-                if isEditing {
-                    TextField("", text: $model.text, prompt: Text("Search or enter address"))
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                        .focused($isFieldFocused)
-                        .onSubmit(submit)
-                        .onExitCommand(perform: cancel)
-                } else {
+                AddressField(
+                    text: $model.text,
+                    isActive: model.isEditing,
+                    focusRequest: focusRequest,
+                    onActivate: beginEditing,
+                    onSubmit: submit,
+                    onCancel: cancel,
+                    onFocusLost: { if workspace.omnibox.isEditing { endEditing() } }
+                )
+
+                if !model.isEditing {
                     restingLabel(for: pane)
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                        .onTapGesture(perform: beginEditing)
+                        .allowsHitTesting(false)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -52,51 +52,24 @@ struct Omnibox: View {
         .frame(minWidth: 260, idealWidth: 520, maxWidth: 640, minHeight: 30)
         .background(RegisteringArea { workspace.registerOmniboxView($0) })
         .onChange(of: workspace.addressFocusRequest) { beginEditing() }
-        .onAppear {
-            // At launch the first pane is empty: start in the address bar, once the window is up.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                if workspace.focusedPane.content == .newTab, !isEditing { beginEditing() }
-            }
-        }
-        .onChange(of: isFieldFocused) { _, focused in
-            // Clicking a page (or anywhere else) ends editing.
-            if !focused, isEditing { endEditing() }
-        }
         .onChange(of: model.text) {
             model.textDidChange()
         }
-        .onChange(of: model.isEditing) { _, editing in
-            // The model ends editing on its own when a suggestion is opened.
-            if !editing, isEditing { endEditing() }
-        }
-        .onChange(of: workspace.focusedPaneID) {
-            if isEditing { endEditing() }
+        .onAppear {
+            // At launch the first pane is empty: start in the address bar.
+            if workspace.focusedPane.content == .newTab { beginEditing() }
         }
     }
 
+    /// Fills in the focused pane's address and puts the keyboard in the field.
+    /// Calling it again (⌘L twice) refreshes the address and reselects it.
     private func beginEditing() {
-        guard !isEditing else {
-            isFieldFocused = true
-            selectAll()
-            return
-        }
         let pane = workspace.focusedPane
         workspace.omnibox.beginEditing(with: AddressFormatter.editableString(for: pane.content == .web ? pane.url : nil))
-        isEditing = true
-        // The field appears on the next pass; focus it once it's there.
-        DispatchQueue.main.async {
-            isFieldFocused = true
-            selectAll()
-        }
-        // If it never got focus (the window wasn't key, say), go back to rest.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            if isEditing, !isFieldFocused { endEditing() }
-        }
+        focusRequest &+= 1
     }
 
     private func endEditing() {
-        isFieldFocused = false
-        isEditing = false
         workspace.omnibox.endEditing()
     }
 
@@ -180,9 +153,136 @@ struct Omnibox: View {
         if workspace.focusedPane.content == .web { workspace.focusContent() }
     }
 
-    private func selectAll() {
-        DispatchQueue.main.async {
-            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+}
+
+/// The address bar's text field, in AppKit.
+///
+/// - At rest it refuses keyboard focus, so the window never parks a caret in it;
+///   a click at rest asks to begin editing instead (`onActivate`).
+/// - It owns its focus: each new `focusRequest` makes it first responder and
+///   selects everything, retrying briefly until the toolbar is on screen.
+/// - Focus it gives up on its own (a click on a page) is reported through
+///   `onFocusLost`; focus taken away because editing ended is not.
+struct AddressField: NSViewRepresentable {
+    @Binding var text: String
+    let isActive: Bool
+    let focusRequest: Int
+    let onActivate: () -> Void
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+    let onFocusLost: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> AddressTextField {
+        let field = AddressTextField()
+        field.delegate = context.coordinator
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: 13)
+        field.lineBreakMode = .byTruncatingTail
+        field.usesSingleLineMode = true
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // Don't act on a request that was made before this field existed.
+        context.coordinator.focusRequest = focusRequest
+        return field
+    }
+
+    func updateNSView(_ field: AddressTextField, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.parent = self
+        field.onActivate = onActivate
+        field.isActivated = isActive
+        field.placeholderString = isActive ? "Search or enter address" : nil
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+
+        if coordinator.focusRequest != focusRequest {
+            coordinator.focusRequest = focusRequest
+            coordinator.focus(field, attempts: 8)
+        }
+        if !isActive, field.currentEditor() != nil {
+            DispatchQueue.main.async { coordinator.resign(field) }
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: AddressField?
+        var focusRequest = 0
+        /// Set while editing is being ended on purpose, so it isn't reported as lost focus.
+        private var isResigning = false
+
+        func focus(_ field: AddressTextField, attempts: Int) {
+            DispatchQueue.main.async { [weak self, weak field] in
+                guard let self, let field, field.isActivated else { return }
+                guard let window = field.window, window.isVisible else {
+                    if attempts > 0 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            self.focus(field, attempts: attempts - 1)
+                        }
+                    }
+                    return
+                }
+                if field.currentEditor() == nil {
+                    window.makeFirstResponder(field)
+                }
+                field.currentEditor()?.selectAll(nil)
+            }
+        }
+
+        func resign(_ field: AddressTextField) {
+            guard !field.isActivated, let editor = field.currentEditor(),
+                  let window = field.window, window.firstResponder === editor else { return }
+            isResigning = true
+            window.makeFirstResponder(nil)
+            isResigning = false
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            parent?.text = field.stringValue
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard !isResigning else { return }
+            parent?.onFocusLost()
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            switch selector {
+            case #selector(NSResponder.insertNewline(_:)):
+                parent?.onSubmit()
+                return true
+            case #selector(NSResponder.cancelOperation(_:)):
+                parent?.onCancel()
+                return true
+            default:
+                return false
+            }
+        }
+    }
+}
+
+final class AddressTextField: NSTextField {
+    /// Whether editing has begun; at rest the field can't take keyboard focus.
+    var isActivated = false
+    var onActivate: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { isActivated }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        if isActivated {
+            super.mouseDown(with: event)
+        } else {
+            onActivate?()
         }
     }
 }
