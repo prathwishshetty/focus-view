@@ -1,4 +1,5 @@
 import AppKit
+import FocusCore
 import Observation
 import WebKit
 

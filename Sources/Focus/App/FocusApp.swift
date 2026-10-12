@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         BrowserSettings.appearance.apply()
         MainActor.assumeIsolated {
-            Task { await ExtensionManager.shared.loadInstalled() }
+            _ = Task { await ExtensionManager.shared.loadInstalled() }
         }
 
         remapWindowClose()
