@@ -70,7 +70,7 @@ public enum SearchSuggestionParser {
 /// Turns whatever the user typed into a URL: either the address they meant or a search.
 public enum AddressResolver {
     /// Schemes we accept verbatim when typed with "://".
-    static let hierarchicalSchemes: Set<String> = ["http", "https", "file", "ftp"]
+    static let hierarchicalSchemes: Set<String> = ["http", "https", "file", "ftp", "focus"]
     /// Schemes we accept verbatim when typed with a bare ":".
     static let opaqueSchemes: Set<String> = ["about", "data", "mailto", "tel", "view-source"]
 
@@ -155,6 +155,8 @@ public enum AddressFormatter {
     /// "https://www.example.com/path" → "example.com".
     public static func displayHost(for url: URL) -> String {
         if url.isFileURL { return url.lastPathComponent }
+        // The browser's own pages show their whole address, like "focus://history".
+        if url.scheme?.lowercased() == "focus", let host = url.host, !host.isEmpty { return "focus://\(host)" }
         guard let host = url.host, !host.isEmpty else { return url.absoluteString }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }

@@ -357,6 +357,7 @@ private struct ShortcutsSettings: View {
         ShortcutGroup(title: "Pages", shortcuts: [
             Shortcut(action: "Back", keys: "⌘["),
             Shortcut(action: "Forward", keys: "⌘]"),
+            Shortcut(action: "Show full history", keys: "⌘Y"),
             Shortcut(action: "Reload", keys: "⌘R"),
             Shortcut(action: "Reload from origin", keys: "⌥⌘R"),
             Shortcut(action: "Stop loading", keys: "⌘."),

@@ -385,6 +385,10 @@ final class Pane: Identifiable {
         }
         webView.onResize = { [weak self] in self?.applyZoom() }
         webView.onRequiredWidthReport = { [weak self] width in self?.pageReportedRequiredWidth(width) }
+        webView.openInNewSplit = { [weak self] url in
+            guard let self, let workspace = self.workspace else { return }
+            workspace.open(url, inNewPaneBeside: self.id)
+        }
 
         self.webView = webView
         self.coordinator = coordinator
@@ -440,6 +444,7 @@ final class Pane: Identifiable {
             webView.contextMenuExtender = nil
             webView.onResize = nil
             webView.onRequiredWidthReport = nil
+            webView.openInNewSplit = nil
             webView.removeFromSuperview()
         }
         webView = nil
@@ -486,6 +491,8 @@ final class FocusWebView: WKWebView {
     var onResize: (() -> Void)?
     /// Called with the width (CSS px) the page needs to avoid scrolling sideways.
     var onRequiredWidthReport: ((CGFloat) -> Void)?
+    /// Opens a link in a new split beside this view's pane (from focus://history).
+    var openInNewSplit: ((URL) -> Void)?
 
     override func setFrameSize(_ newSize: NSSize) {
         let changed = newSize.width != frame.size.width
@@ -523,6 +530,7 @@ enum WebViewFactory {
         configuration.preferences.isElementFullscreenEnabled = true
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop
         configuration.userContentController = sharedContentController
+        configuration.setURLSchemeHandler(FocusPageSchemeHandler.shared, forURLScheme: FocusPages.scheme)
         return configuration
     }
 
@@ -536,6 +544,7 @@ enum WebViewFactory {
             forMainFrameOnly: true
         ))
         controller.add(PageWidthReporter.shared, name: PageWidthReporter.messageName)
+        controller.add(HistoryPageBridge.shared, name: HistoryPageBridge.messageName)
         return controller
     }()
 }

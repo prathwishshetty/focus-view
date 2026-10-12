@@ -8,7 +8,7 @@ final class PaneWebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
     private var downloadDestinations: [ObjectIdentifier: URL] = [:]
 
     /// Schemes the web view handles itself; everything else is handed to macOS.
-    private static let webSchemes: Set<String> = ["http", "https", "about", "file", "data", "blob", "javascript"]
+    private static let webSchemes: Set<String> = ["http", "https", "about", "file", "data", "blob", "javascript", FocusPages.scheme]
 
     init(pane: Pane) {
         self.pane = pane
@@ -22,6 +22,11 @@ final class PaneWebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
         if let scheme = url.scheme?.lowercased(), !Self.webSchemes.contains(scheme) {
             // mailto:, facetime:, app links… let the system open them.
             NSWorkspace.shared.open(url)
+            return .cancel
+        }
+
+        // The browser's own pages (focus://history) open as a whole page, never inside another one.
+        if url.scheme?.lowercased() == FocusPages.scheme, navigationAction.targetFrame?.isMainFrame == false {
             return .cancel
         }
 

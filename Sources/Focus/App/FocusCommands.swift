@@ -57,6 +57,9 @@ struct FocusCommands: Commands {
                 .keyboardShortcut("[")
             Button("Forward") { workspace.goForward() }
                 .keyboardShortcut("]")
+            Divider()
+            Button("Show Full History") { workspace.showHistory() }
+                .keyboardShortcut("y")
 
             let recent = HistoryStore.shared.entries.prefix(12)
             if !recent.isEmpty {
