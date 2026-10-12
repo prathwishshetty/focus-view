@@ -28,6 +28,24 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   centered; click it (or press ⌘L) to edit the full address. It accepts an
   address or a search and understands `localhost:3000`, IP addresses, `.local`
   hosts and explicit schemes.
+- **Suggestions as you type** from your history, your favorites and the search
+  engine. A site whose address starts with what you typed becomes the
+  **Top Hit** (type `git` and press Return for github.com). Use ↑/↓ to pick a
+  row, Return to open it, or ⌘Return to open it in a new split.
+- **Command palette** (⌘K): jump to any open or minimized pane, run any command
+  (split, maximize, find, reader, zoom, settings…), or type an address or a
+  search to open it here or in a new split. Matching is fuzzy, so `spr` finds
+  "Split Right".
+- **Find in page** (⌘F): a small floating bar in the pane's corner. It
+  highlights every match, shows "3 of 12", and steps with Return / ⇧Return or
+  ⌘G / ⇧⌘G. Each pane keeps its own search.
+- **Reader mode** (⇧⌘R, or the page icon in the omnibox when a page looks like
+  an article): the article on its own, in a calm serif layout whose text size
+  and margins scale with the pane, so it reads well in a narrow split and when
+  maximized. It follows light and dark mode and your ⌘+/⌘- zoom.
+- **Back/forward history**: press and hold the back or forward button to see
+  the pane's history and jump straight to any page. History ▸ Recently Visited
+  lists the last pages you opened.
 - **Transparent toolbar** over the window background, which follows the
   system's light or dark appearance.
 - **Right-click menu** on pages and the new tab page with split, zoom, equalize
@@ -47,12 +65,13 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
 
 Focus ▸ Settings… (⌘,) opens a standard macOS settings window:
 
-- **General**: search engine; new panes open the new tab page or a homepage.
+- **General**: search engine and whether to ask it for suggestions; new panes
+  open the new tab page or a homepage.
 - **Appearance**: System / Light / Dark; dim unfocused panes; outline the
   focused pane; show or hide the clock, favorites and shortcut hints on the new
   tab page.
 - **Websites**: default page zoom, shrink-to-fit, block pop-ups, Web Inspector,
-  and clear browsing data.
+  clear history and clear browsing data.
 - **Favorites**: add, edit, remove and reorder the new tab page's sites.
 - **Shortcuts**: a reference of every keyboard shortcut.
 
@@ -71,8 +90,12 @@ Focus ▸ Settings… (⌘,) opens a standard macOS settings window:
 | Resize split | ⌃⌘ + arrow keys |
 | Equalize splits | ⌃⌘= |
 | Focus omnibox | ⌘L |
-| Back / forward | ⌘[ / ⌘] |
-| Reload / hard reload / stop | ⌘R / ⇧⌘R / ⌘. |
+| Open suggestion in a new split | ⌘↩ (in the omnibox) |
+| Command palette | ⌘K |
+| Find in page / next / previous | ⌘F / ⌘G / ⇧⌘G |
+| Reader mode | ⇧⌘R |
+| Back / forward | ⌘[ / ⌘] (hold the buttons for history) |
+| Reload / hard reload / stop | ⌘R / ⌥⌘R / ⌘. |
 | Page zoom in / out / reset | ⌘= / ⌘- / ⌘0 |
 
 ## Building
@@ -91,11 +114,16 @@ swift run     # quick start as a bare executable
 ```
 Sources/FocusCore/      Platform-independent logic (unit tested)
   SplitTree.swift       Binary split tree: split, close, resize, equalize, spatial navigation
-  AddressResolver.swift Address vs. search detection, search engines, URL display
+  AddressResolver.swift Address vs. search detection, search engines and their suggestions, URL display
+  BrowsingHistory.swift Visit history: one entry per address, visit counts, size limit
+  SuggestionMatcher.swift  Ranks history and favorites against what's typed
+  FuzzyMatcher.swift    Fuzzy matching for the command palette
 Sources/Focus/
   App/                  App entry point, menu commands
-  Model/                Workspace (tree + focus + zoom), Pane (owns its WKWebView), WebKit delegates
-  Views/                Split rendering, pane cards, omnibox, new tab page
+  Model/                Workspace (tree + focus + zoom), Pane (owns its WKWebView), WebKit delegates,
+                        history store, omnibox and palette models, find-in-page and reader mode
+  Views/                Split rendering, pane cards, omnibox and suggestions, command palette, new tab page
+  Settings/             Settings window and stored preferences
   Support/              Keyboard shortcut routing
 ```
 
@@ -118,12 +146,9 @@ Candidate features, roughly grouped. None of these are built yet.
 - **Per-pane mute**, with an indicator for panes playing audio.
 
 ### Address bar & navigation
-- **History and autocomplete**: suggestions from history, favorites and the search engine as you type.
-- **Command palette** (⌘K): jump to an open or minimized pane, run any command, open a URL.
 - **Search shortcuts**: `w swift` searches Wikipedia, `gh focus` searches GitHub, and so on.
-- **Find in page** (⌘F) with a small floating bar per pane.
-- **Reader mode** for articles, sized to the pane.
-- **Long-press back/forward** to show the pane's history list.
+- **History window**: browse and search everything you've visited, grouped by day, and remove entries.
+- **Reader mode settings**: font, text size and theme controls, and saving articles to read later.
 
 ### Privacy & security
 - **Private panes**: a pane with its own ephemeral data store that leaves nothing behind.

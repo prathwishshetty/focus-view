@@ -12,16 +12,34 @@ struct FocusCommands: Commands {
                 .keyboardShortcut("t")
             Button("Open Location…") { workspace.focusAddressBar() }
                 .keyboardShortcut("l")
+            Button("Command Palette…") { workspace.togglePalette() }
+                .keyboardShortcut("k")
             Divider()
             Button("Close Pane") { workspace.performCloseCommand() }
                 .keyboardShortcut("w")
         }
 
+        // Replaces the text-editing Find submenu, which only knows about text views.
+        CommandGroup(replacing: .textEditing) {
+            Menu("Find") {
+                Button("Find…") { workspace.showFindBar() }
+                    .keyboardShortcut("f")
+                Button("Find Next") { workspace.findNext() }
+                    .keyboardShortcut("g")
+                Button("Find Previous") { workspace.findPrevious() }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+            }
+        }
+
         CommandGroup(after: .toolbar) {
+            Button(workspace.focusedPane.isReaderVisible ? "Hide Reader" : "Show Reader") { workspace.toggleReader() }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(!workspace.focusedPane.isReaderAvailable && !workspace.focusedPane.isReaderVisible)
+            Divider()
             Button("Reload Page") { workspace.reload() }
                 .keyboardShortcut("r")
             Button("Reload Page From Origin") { workspace.reload(fromOrigin: true) }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .keyboardShortcut("r", modifiers: [.command, .option])
             Button("Stop Loading") { workspace.stopLoading() }
                 .keyboardShortcut(".")
             Divider()
@@ -39,6 +57,22 @@ struct FocusCommands: Commands {
                 .keyboardShortcut("[")
             Button("Forward") { workspace.goForward() }
                 .keyboardShortcut("]")
+
+            let recent = HistoryStore.shared.entries.prefix(12)
+            if !recent.isEmpty {
+                Divider()
+                Section("Recently Visited") {
+                    ForEach(Array(recent), id: \.url) { entry in
+                        Button(entry.title.isEmpty ? entry.url : entry.title) {
+                            if let url = URL(string: entry.url) { workspace.open(url, inNewPane: false) }
+                        }
+                    }
+                }
+            }
+
+            Divider()
+            Button("Clear History…") { HistoryStore.shared.confirmAndClear() }
+                .disabled(HistoryStore.shared.entries.isEmpty)
         }
 
         CommandMenu("Pane") {

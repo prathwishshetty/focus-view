@@ -26,12 +26,44 @@ public enum SearchEngine: String, CaseIterable, Codable, Sendable {
     }
 
     public func searchURL(for query: String) -> URL {
-        // URLComponents leaves "+" and "&" partially unescaped, which search
-        // engines would misread, so encode the query by hand.
+        URL(string: "\(base)?q=\(Self.encode(query))")!
+    }
+
+    /// Where to fetch completions for a partial query (OpenSearch suggestion JSON).
+    public func suggestionsURL(for query: String) -> URL? {
+        let query = Self.encode(query)
+        return switch self {
+        case .google: URL(string: "https://suggestqueries.google.com/complete/search?client=firefox&ie=utf-8&oe=utf-8&q=\(query)")
+        case .duckDuckGo: URL(string: "https://duckduckgo.com/ac/?type=list&q=\(query)")
+        case .bing: URL(string: "https://api.bing.com/osjson.aspx?query=\(query)")
+        case .kagi: URL(string: "https://kagi.com/api/autosuggest?q=\(query)")
+        }
+    }
+
+    /// URLComponents leaves "+" and "&" partially unescaped, which search
+    /// engines would misread, so queries are encoded by hand.
+    static func encode(_ query: String) -> String {
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-._~")
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
-        return URL(string: "\(base)?q=\(encoded)")!
+        return query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
+    }
+}
+
+/// Reads search engine suggestions in the OpenSearch format: `["query", ["one", "two", …]]`.
+public enum SearchSuggestionParser {
+    public static func parse(_ data: Data) -> [String] {
+        let json = (try? JSONSerialization.jsonObject(with: data))
+            // Some endpoints answer in Latin-1 despite being asked for UTF-8.
+            ?? String(data: data, encoding: .isoLatin1)
+                .flatMap { $0.data(using: .utf8) }
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) }
+        guard let array = json as? [Any], array.count >= 2, let items = array[1] as? [Any] else { return [] }
+        var seen = Set<String>()
+        return items.compactMap { item in
+            guard let text = (item as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty,
+                  seen.insert(text.lowercased()).inserted else { return nil }
+            return text
+        }
     }
 }
 
@@ -52,6 +84,15 @@ public enum AddressResolver {
             return url
         }
         return engine.searchURL(for: text)
+    }
+
+    /// Whether `input` would open as an address rather than run a search.
+    public static func isAddress(_ input: String) -> Bool {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        if explicitURL(text) != nil { return true }
+        return !text.contains(where: \.isWhitespace) && looksLikeHost(text)
+            && URL(string: (isLocal(text) ? "http://" : "https://") + text)?.host != nil
     }
 
     private static func explicitURL(_ text: String) -> URL? {

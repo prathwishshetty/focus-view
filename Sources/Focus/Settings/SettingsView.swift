@@ -30,6 +30,7 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @AppStorage(BrowserSettings.Key.searchEngine) private var searchEngine: SearchEngine = .google
+    @AppStorage(BrowserSettings.Key.searchSuggestions) private var searchSuggestions = true
     @AppStorage(BrowserSettings.Key.newPaneBehavior) private var newPaneBehavior: NewPaneBehavior = .newTabPage
     @AppStorage(BrowserSettings.Key.homepage) private var homepage = ""
 
@@ -41,8 +42,9 @@ private struct GeneralSettings: View {
                         Text(engine.displayName).tag(engine)
                     }
                 }
+                Toggle("Include search engine suggestions", isOn: $searchSuggestions)
             } footer: {
-                Text("Used when what you type in the address bar isn't a web address.")
+                Text("Used when what you type in the address bar isn't a web address. With suggestions on, what you type is sent to \(searchEngine.displayName) as you type; history and favorites are always suggested.")
                     .settingsFootnote()
             }
 
@@ -59,7 +61,7 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(height: 300)
+        .frame(height: 340)
     }
 }
 
@@ -110,6 +112,7 @@ private struct WebsiteSettings: View {
     @AppStorage(BrowserSettings.Key.webInspector) private var webInspector = true
 
     @State private var isConfirmingClear = false
+    @State private var isConfirmingClearHistory = false
     @State private var clearState: ClearState = .idle
 
     private enum ClearState { case idle, clearing, done }
@@ -139,6 +142,10 @@ private struct WebsiteSettings: View {
             }
 
             Section("Privacy") {
+                LabeledContent("History") {
+                    Button("Clear History…") { isConfirmingClearHistory = true }
+                        .disabled(HistoryStore.shared.entries.isEmpty)
+                }
                 LabeledContent("Website data") {
                     HStack(spacing: 8) {
                         switch clearState {
@@ -155,7 +162,13 @@ private struct WebsiteSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(height: 420)
+        .frame(height: 460)
+        .confirmationDialog("Clear browsing history?", isPresented: $isConfirmingClearHistory) {
+            Button("Clear History", role: .destructive) { HistoryStore.shared.clear() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes every page from your history and address bar suggestions.")
+        }
         .confirmationDialog(
             "Clear all browsing data?",
             isPresented: $isConfirmingClear
@@ -338,13 +351,18 @@ private struct ShortcutsSettings: View {
             Shortcut(action: "Next pane", keys: "⌃⇥"),
             Shortcut(action: "Previous pane", keys: "⌃⇧⇥"),
             Shortcut(action: "Address bar", keys: "⌘L"),
+            Shortcut(action: "Open in a new split (in the address bar)", keys: "⌘↩"),
+            Shortcut(action: "Command palette", keys: "⌘K"),
         ]),
         ShortcutGroup(title: "Pages", shortcuts: [
             Shortcut(action: "Back", keys: "⌘["),
             Shortcut(action: "Forward", keys: "⌘]"),
             Shortcut(action: "Reload", keys: "⌘R"),
-            Shortcut(action: "Reload from origin", keys: "⇧⌘R"),
+            Shortcut(action: "Reload from origin", keys: "⌥⌘R"),
             Shortcut(action: "Stop loading", keys: "⌘."),
+            Shortcut(action: "Find in page", keys: "⌘F"),
+            Shortcut(action: "Next / previous match", keys: "⌘G ⇧⌘G"),
+            Shortcut(action: "Show / hide reader", keys: "⇧⌘R"),
             Shortcut(action: "Zoom in / out / actual size", keys: "⌘= ⌘- ⌘0"),
         ]),
     ]
@@ -364,7 +382,7 @@ private struct ShortcutsSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(height: 460)
+        .frame(height: 500)
     }
 }
 

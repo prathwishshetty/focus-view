@@ -32,6 +32,7 @@ final class ShortcutMonitor {
         static let returnKey: UInt16 = 36
         static let enter: UInt16 = 76
         static let tab: UInt16 = 48
+        static let escape: UInt16 = 53
     }
 
     private func handle(_ event: NSEvent) -> Bool {
@@ -42,6 +43,39 @@ final class ShortcutMonitor {
         let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
         let character = event.charactersIgnoringModifiers?.lowercased() ?? ""
         let arrow = arrowDirection(event.keyCode)
+        let isReturn = event.keyCode == Key.returnKey || event.keyCode == Key.enter
+
+        // Overlays get the arrow keys first.
+        if workspace.palette.isVisible {
+            switch (modifiers, event.keyCode, character) {
+            case ([], Key.upArrow, _), ([.control], _, "p"):
+                workspace.palette.moveSelection(by: -1)
+                return true
+            case ([], Key.downArrow, _), ([.control], _, "n"):
+                workspace.palette.moveSelection(by: 1)
+                return true
+            case ([], Key.escape, _):
+                workspace.hidePalette()
+                return true
+            default:
+                break
+            }
+        } else if workspace.omnibox.isEditing {
+            if workspace.omnibox.isShowingSuggestions, modifiers.isEmpty, arrow == .up || arrow == .down {
+                workspace.omnibox.moveSelection(by: arrow == .up ? -1 : 1)
+                return true
+            }
+            // ⌘↩ opens the address in a new split.
+            if modifiers == [.command], isReturn {
+                workspace.submitAddressBar(inNewPane: true)
+                return true
+            }
+        } else if modifiers == [.shift], isReturn, workspace.focusedPane.isFindBarVisible,
+                  let editor = window.firstResponder as? NSTextView, editor.isFieldEditor {
+            // ⇧↩ in the find bar goes to the previous match.
+            workspace.findPrevious()
+            return true
+        }
 
         switch modifiers {
         case [.command]:
@@ -50,6 +84,9 @@ final class ShortcutMonitor {
             case "t": workspace.newPane()
             case "w": workspace.closeFocusedPane()
             case "l": workspace.focusAddressBar()
+            case "k": workspace.togglePalette()
+            case "f": workspace.showFindBar()
+            case "g": workspace.findNext()
             case "r": workspace.reload()
             case "[": workspace.goBack()
             case "]": workspace.goForward()
@@ -60,17 +97,22 @@ final class ShortcutMonitor {
             default: return false
             }
         case [.command, .shift]:
-            if event.keyCode == Key.returnKey || event.keyCode == Key.enter {
+            if isReturn {
                 workspace.toggleZoom()
                 return true
             }
             switch character {
             case "d": workspace.split(.down)
-            case "r": workspace.reload(fromOrigin: true)
+            case "r": workspace.toggleReader()
+            case "g": workspace.findPrevious()
             case "+", "=": workspace.zoomIn()
             default: return false
             }
         case [.command, .option]:
+            if character == "r" {
+                workspace.reload(fromOrigin: true)
+                return true
+            }
             guard let arrow else { return false }
             workspace.focus(arrow)
         case [.command, .control]:

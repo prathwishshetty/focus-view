@@ -69,6 +69,10 @@ final class PaneWebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
         pane?.pageDidCommit()
     }
 
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        pane?.pageDidFinishLoading()
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         report(error)
     }

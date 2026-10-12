@@ -12,6 +12,8 @@ struct WorkspaceView: View {
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .background(RegisteringArea { workspace.registerCanvasView($0) })
                 .overlay { PaneDragOverlay(size: proxy.size) }
+                .overlay { OmniboxSuggestionList(canvasSize: proxy.size) }
+                .overlay { CommandPalette(canvasSize: proxy.size) }
                 .onAppear { workspace.canvasSize = proxy.size }
                 .onChange(of: proxy.size) { _, size in workspace.canvasSize = size }
         }
@@ -43,12 +45,28 @@ struct WorkspaceView: View {
         let pane = workspace.focusedPane
 
         ToolbarItemGroup(placement: .navigation) {
-            Button("Back", systemImage: "chevron.left") { workspace.goBack() }
-                .disabled(!pane.canGoBack)
-                .help("Back (⌘[)")
-            Button("Forward", systemImage: "chevron.right") { workspace.goForward() }
-                .disabled(!pane.canGoForward)
-                .help("Forward (⌘])")
+            // Click to go back or forward; press and hold for the pane's history.
+            Menu {
+                BackForwardMenuItems(pane: pane, entries: pane.backList)
+            } label: {
+                Label("Back", systemImage: "chevron.left")
+            } primaryAction: {
+                workspace.goBack()
+            }
+            .menuIndicator(.hidden)
+            .disabled(!pane.canGoBack)
+            .help("Back (⌘[) — hold for history")
+
+            Menu {
+                BackForwardMenuItems(pane: pane, entries: pane.forwardList)
+            } label: {
+                Label("Forward", systemImage: "chevron.right")
+            } primaryAction: {
+                workspace.goForward()
+            }
+            .menuIndicator(.hidden)
+            .disabled(!pane.canGoForward)
+            .help("Forward (⌘]) — hold for history")
         }
 
         ToolbarItem(placement: .principal) {
@@ -74,6 +92,19 @@ struct WorkspaceView: View {
             }
             .disabled(workspace.paneCount < 2)
             .help(workspace.isZoomed ? "Restore pane size (⇧⌘↩)" : "Maximize the focused pane (⇧⌘↩)")
+        }
+    }
+}
+
+/// A pane's back or forward list, nearest page first.
+private struct BackForwardMenuItems: View {
+    let pane: Pane
+    let entries: [BackForwardEntry]
+
+    var body: some View {
+        ForEach(entries) { entry in
+            Button(entry.title) { pane.go(to: entry.item) }
+                .help(entry.url.absoluteString)
         }
     }
 }

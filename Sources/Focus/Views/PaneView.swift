@@ -93,6 +93,15 @@ struct PaneView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
+            if pane.isFindBarVisible {
+                // Below the strip where the pane's hover controls appear.
+                FindBar(pane: pane)
+                    .padding(.top, hasSiblings ? 34 : 10)
+                    .padding(.trailing, 10)
+                    .transition(.opacity.combined(with: .offset(y: -6)))
+            }
+        }
+        .overlay(alignment: .topTrailing) {
             if showsWindowControls {
                 PaneWindowControls(paneID: pane.id, isMaximized: workspace.zoomedPaneID == pane.id)
                     .padding(.top, 5)
@@ -103,7 +112,10 @@ struct PaneView: View {
         .shadow(color: .black.opacity(isFocused && !isAlone ? 0.22 : 0.10), radius: isFocused ? 10 : 4, y: 2)
         .background(
             PaneHitArea(
-                onClick: { workspace.focus(pane.id) },
+                onClick: { point in
+                    guard !workspace.shouldIgnorePaneClick(at: point) else { return }
+                    workspace.focus(pane.id)
+                },
                 register: { workspace.registerPaneView($0, for: pane.id) }
             )
         )
@@ -111,6 +123,8 @@ struct PaneView: View {
         .animation(.easeOut(duration: 0.2), value: pane.loadError)
         .animation(.easeOut(duration: 0.15), value: dropZone)
         .animation(.easeOut(duration: 0.15), value: isBeingDragged)
+        .animation(.easeOut(duration: 0.15), value: pane.isFindBarVisible)
+        .animation(.easeInOut(duration: 0.22), value: pane.isReaderVisible)
     }
 
     @ViewBuilder
@@ -119,8 +133,16 @@ struct PaneView: View {
         case .newTab:
             NewTabView(pane: pane, isFocused: isFocused)
         case .web:
-            WebViewHost(pane: pane, isFocused: isFocused, cornerRadius: PaneMetrics.cornerRadius)
-                .background(Color(nsColor: .textBackgroundColor))
+            ZStack {
+                if pane.isReaderVisible {
+                    WebViewHost(pane: pane, surface: .reader, isFocused: isFocused, cornerRadius: PaneMetrics.cornerRadius)
+                        .transition(.opacity)
+                } else {
+                    WebViewHost(pane: pane, surface: .page, isFocused: isFocused, cornerRadius: PaneMetrics.cornerRadius)
+                        .transition(.opacity)
+                }
+            }
+            .background(Color(nsColor: .textBackgroundColor))
         }
     }
 
@@ -196,6 +218,89 @@ private struct LoadErrorView: View {
                     .padding(.top, 6)
             }
             .padding(32)
+        }
+    }
+}
+
+/// Find in page: a small floating bar in the pane's top corner.
+private struct FindBar: View {
+    @Bindable var pane: Pane
+    @FocusState private var isFieldFocused: Bool
+
+    private var status: String {
+        let result = pane.findResult
+        if pane.findQuery.isEmpty { return "" }
+        if result.count == 0 { return "No matches" }
+        return "\(result.index) of \(result.count)\(result.count >= 2000 ? "+" : "")"
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 6)
+            TextField("Find in page", text: $pane.findQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .frame(minWidth: 70, idealWidth: 150, maxWidth: 170)
+                .focused($isFieldFocused)
+                .onSubmit { pane.findNext() }
+                .onExitCommand { pane.hideFindBar() }
+            Text(status)
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
+            Divider()
+                .frame(height: 14)
+                .padding(.horizontal, 2)
+            FindButton(symbol: "chevron.up", help: "Previous match (⇧⌘G)") { pane.findPrevious() }
+                .disabled(pane.findResult.count == 0)
+            FindButton(symbol: "chevron.down", help: "Next match (⌘G)") { pane.findNext() }
+                .disabled(pane.findResult.count == 0)
+            FindButton(symbol: "xmark", help: "Done (Esc)") { pane.hideFindBar() }
+        }
+        .padding(.trailing, 4)
+        .frame(height: 30)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1)))
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+        .onAppear(perform: focusField)
+        .onChange(of: pane.findFocusRequest) { focusField() }
+        .onChange(of: pane.findQuery) { pane.findQueryDidChange() }
+    }
+
+    private func focusField() {
+        DispatchQueue.main.async {
+            isFieldFocused = true
+            DispatchQueue.main.async {
+                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            }
+        }
+    }
+
+    private struct FindButton: View {
+        let symbol: String
+        let help: String
+        let action: () -> Void
+        @State private var isHovering = false
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            Button(action: action) {
+                Image(systemName: symbol)
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 22, height: 20)
+                    .foregroundStyle(isHovering && isEnabled ? .primary : .secondary)
+                    .background(Capsule().fill(Color.primary.opacity(isHovering && isEnabled ? 0.1 : 0)))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .opacity(isEnabled ? 1 : 0.4)
+            .onHover { isHovering = $0 }
+            .help(help)
+            .accessibilityLabel(help)
         }
     }
 }

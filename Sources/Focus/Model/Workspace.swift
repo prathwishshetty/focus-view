@@ -26,9 +26,16 @@ final class Workspace {
     /// The pane being dragged to a new position, if any.
     private(set) var paneDrag: PaneDrag?
 
+    /// The address bar's text and suggestions.
+    let omnibox = OmniboxModel()
+    /// The ⌘K command palette.
+    let palette = CommandPaletteModel()
+
     /// Views covering each pane, used to hit-test drops in window coordinates.
     @ObservationIgnored private var paneViews: [PaneID: WeakView] = [:]
     @ObservationIgnored private var canvasView: WeakView?
+    @ObservationIgnored private var omniboxView: WeakView?
+    @ObservationIgnored private var suggestionsView: WeakView?
 
     /// The size of the pane area, used to pick a split direction automatically.
     @ObservationIgnored var canvasSize = CGSize(width: 1200, height: 800)
@@ -41,6 +48,7 @@ final class Workspace {
         panes = [first.id: first]
         focusedPaneID = first.id
         first.workspace = self
+        palette.workspace = self
         if let homepage = BrowserSettings.homepageURL { first.load(homepage) }
     }
 
@@ -78,10 +86,12 @@ final class Workspace {
     /// Moves keyboard focus into the focused pane's content (web page or new tab field).
     func focusContent() {
         let pane = focusedPane
-        if let webView = pane.webView, pane.content == .web {
+        if let webView = pane.displayedWebView, pane.content == .web {
             // Defer until SwiftUI has (re)attached the web view to the window.
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 guard let window = webView.window, window.firstResponder !== webView else { return }
+                // Don't pull the keyboard out of the pane's find bar.
+                if let view = self?.paneViews[pane.id]?.view, view.hasTextFieldFocusOver { return }
                 window.makeFirstResponder(webView)
             }
         } else {
@@ -103,7 +113,102 @@ final class Workspace {
     }
 
     func focusAddressBar() {
+        hidePalette(restoringFocus: false)
         addressFocusRequest &+= 1
+    }
+
+    // MARK: - Address bar
+
+    /// Records the address field so its suggestions can be drawn right below it.
+    func registerOmniboxView(_ view: NSView) {
+        omniboxView = WeakView(view)
+    }
+
+    func registerSuggestionsView(_ view: NSView) {
+        suggestionsView = WeakView(view)
+    }
+
+    /// The address field's frame in the pane area's coordinates (top-left origin).
+    func omniboxFrameInCanvas() -> CGRect? {
+        guard let field = omniboxView?.view, let canvas = canvasView?.view,
+              let window = field.window, window === canvas.window else { return nil }
+        let frame = canvas.convert(field.bounds, from: field)
+        return canvas.isFlipped ? frame : CGRect(x: frame.minX, y: canvas.bounds.height - frame.maxY, width: frame.width, height: frame.height)
+    }
+
+    /// Opens what the address bar holds: the highlighted suggestion, or the text as typed.
+    func submitAddressBar(inNewPane: Bool = false) {
+        let url = omnibox.selectedSuggestion?.url
+            ?? AddressResolver.resolve(omnibox.text, engine: BrowserSettings.searchEngine)
+        guard let url else { return }
+        open(url, inNewPane: inNewPane)
+    }
+
+    /// Loads `url` in the focused pane, or in a new split beside it.
+    func open(_ url: URL, inNewPane: Bool) {
+        if inNewPane {
+            open(url, inNewPaneBeside: focusedPaneID)
+        } else {
+            focusedPane.load(url)
+            focusContent()
+        }
+    }
+
+    /// Clicks on an overlay floating above the panes (the palette, the address
+    /// bar's suggestions) shouldn't also focus the pane underneath.
+    func shouldIgnorePaneClick(at windowPoint: NSPoint) -> Bool {
+        if palette.isVisible { return true }
+        if omnibox.isShowingSuggestions, let view = suggestionsView?.view, view.window != nil {
+            return view.bounds.contains(view.convert(windowPoint, from: nil))
+        }
+        return false
+    }
+
+    // MARK: - Command palette
+
+    func togglePalette() {
+        palette.isVisible ? hidePalette() : showPalette()
+    }
+
+    func showPalette() {
+        guard !palette.isVisible else { return }
+        palette.query = ""
+        withAnimation(.snappy(duration: 0.18)) { palette.isVisible = true }
+    }
+
+    /// Closes the palette, returning the keyboard to the focused pane unless the
+    /// command that closed it puts focus somewhere itself.
+    func hidePalette(restoringFocus: Bool = true) {
+        guard palette.isVisible else { return }
+        // Let go of the palette's field before it disappears.
+        if let window = mainWindow, let editor = window.firstResponder as? NSTextView, editor.isFieldEditor {
+            window.makeFirstResponder(nil)
+        }
+        withAnimation(.easeOut(duration: 0.12)) { palette.isVisible = false }
+        if restoringFocus { focusContent() }
+    }
+
+    // MARK: - Find & reader
+
+    func showFindBar() {
+        let pane = focusedPane
+        guard pane.content == .web else { return NSSound.beep() }
+        pane.showFindBar()
+    }
+
+    func findNext() { focusedPane.findNext() }
+    func findPrevious() { focusedPane.findPrevious() }
+
+    func toggleReader() {
+        let pane = focusedPane
+        guard pane.isReaderVisible || pane.isReaderAvailable else { return NSSound.beep() }
+        pane.toggleReader()
+    }
+
+    func copyPageLink() {
+        guard focusedPane.content == .web, let url = focusedPane.url else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
     }
 
     // MARK: - Splitting

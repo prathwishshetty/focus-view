@@ -9,14 +9,15 @@ import WebKit
 /// pages never reload because of a layout change.
 struct WebViewHost: NSViewRepresentable {
     let pane: Pane
+    var surface: WebSurface = .page
     let isFocused: Bool
     var cornerRadius: CGFloat
 
     func makeNSView(context: Context) -> WebContainerView {
-        let view = WebContainerView()
+        let view = WebContainerView(surface: surface)
         // The newest container wins: during an animated layout change the old
         // container lingers on screen and must not take the web view back.
-        pane.webHost = view
+        pane.setHost(view, for: surface)
         view.update(pane: pane, isFocused: isFocused, cornerRadius: cornerRadius)
         return view
     }
@@ -31,11 +32,13 @@ struct WebViewHost: NSViewRepresentable {
 }
 
 final class WebContainerView: NSView {
+    let surface: WebSurface
     private weak var pane: Pane?
     private var isFocused = false
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(surface: WebSurface) {
+        self.surface = surface
+        super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = true
         layer?.cornerCurve = .continuous
@@ -46,19 +49,21 @@ final class WebContainerView: NSView {
 
     private var ownsWebView: Bool {
         guard let pane else { return false }
-        return pane.webHost === self
+        return pane.host(for: surface) === self
     }
+
+    private var webView: FocusWebView? { pane?.hostedWebView(for: surface) }
 
     func update(pane: Pane, isFocused focused: Bool, cornerRadius: CGFloat) {
         self.pane = pane
         layer?.cornerRadius = cornerRadius
 
         // If the owning container was torn down, a container still on screen takes over.
-        if !ownsWebView, window != nil, pane.webHost == nil {
-            pane.webHost = self
+        if !ownsWebView, window != nil, pane.host(for: surface) == nil {
+            pane.setHost(self, for: surface)
         }
 
-        if ownsWebView, let webView = pane.webView, webView.superview !== self {
+        if ownsWebView, let webView, webView.superview !== self {
             webView.removeFromSuperview()
             webView.frame = bounds
             webView.autoresizingMask = [.width, .height]
@@ -73,11 +78,11 @@ final class WebContainerView: NSView {
 
     func detach() {
         guard let pane else { return }
-        if let webView = pane.webView, webView.superview === self {
+        if let webView, webView.superview === self {
             webView.removeFromSuperview()
         }
-        if pane.webHost === self {
-            pane.webHost = nil
+        if pane.host(for: surface) === self {
+            pane.setHost(nil, for: surface)
         }
     }
 
@@ -90,9 +95,10 @@ final class WebContainerView: NSView {
 
     private func claimFirstResponder() {
         DispatchQueue.main.async { [weak self] in
-            guard let self, let webView = self.pane?.webView, webView.superview === self,
+            guard let self, let webView = self.webView, webView.superview === self,
                   let window = self.window else { return }
-            if window.firstResponder !== webView {
+            // Leave the keyboard with a field floating over the page, like its find bar.
+            if window.firstResponder !== webView, !self.hasTextFieldFocusOver {
                 window.makeFirstResponder(webView)
             }
         }
@@ -103,7 +109,8 @@ final class WebContainerView: NSView {
 /// clicking anywhere — including inside a web page — focuses the pane, and
 /// registers itself so pane drags can hit-test against it.
 struct PaneHitArea: NSViewRepresentable {
-    let onClick: () -> Void
+    /// Called with the click's location in window coordinates.
+    let onClick: (NSPoint) -> Void
     let register: (NSView) -> Void
 
     func makeNSView(context: Context) -> PaneHitView {
@@ -120,7 +127,7 @@ struct PaneHitArea: NSViewRepresentable {
 }
 
 final class PaneHitView: NSView {
-    var onClick: (() -> Void)?
+    var onClick: ((NSPoint) -> Void)?
     var register: ((NSView) -> Void)?
     private var monitor: Any?
 
@@ -140,7 +147,7 @@ final class PaneHitView: NSView {
                 guard let self, let window = self.window, event.window === window,
                       !self.isHiddenOrHasHiddenAncestor else { return }
                 let point = self.convert(event.locationInWindow, from: nil)
-                if self.bounds.contains(point) { self.onClick?() }
+                if self.bounds.contains(point) { self.onClick?(event.locationInWindow) }
             }
             return event
         }
@@ -298,5 +305,63 @@ final class PaneGripView: NSView {
         }
         isDragging = false
         mouseDownPoint = nil
+    }
+}
+
+extension NSView {
+    /// Whether the window's keyboard focus is in a text field drawn on top of
+    /// this view (a pane's find bar sits over its page, for example).
+    var hasTextFieldFocusOver: Bool {
+        guard let window, let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
+              let field = editor.delegate as? NSView, field.window === window else { return false }
+        let frame = convert(field.bounds, from: field)
+        return bounds.contains(CGPoint(x: frame.midX, y: frame.midY))
+    }
+}
+
+/// A click target that never takes keyboard focus, so clicking it leaves the
+/// text field being typed in (the address bar) focused. Also reports hovering.
+struct ClickArea: NSViewRepresentable {
+    var onHover: (Bool) -> Void = { _ in }
+    let onClick: () -> Void
+
+    func makeNSView(context: Context) -> ClickAreaView {
+        let view = ClickAreaView()
+        updateNSView(view, context: context)
+        return view
+    }
+
+    func updateNSView(_ view: ClickAreaView, context: Context) {
+        view.onHover = onHover
+        view.onClick = onClick
+    }
+}
+
+final class ClickAreaView: NSView {
+    var onHover: ((Bool) -> Void)?
+    var onClick: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { false }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
+
+    // Handled on mouse up, so the click lands like a normal button press.
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
     }
 }

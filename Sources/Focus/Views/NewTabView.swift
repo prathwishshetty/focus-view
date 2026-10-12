@@ -239,7 +239,7 @@ private struct ShortcutHints: View {
 
     private let hints: [Hint] = [
         Hint(keys: "⌘D", label: "Split right"),
-        Hint(keys: "⇧⌘D", label: "Split down"),
+        Hint(keys: "⌘K", label: "Commands"),
         Hint(keys: "⌥⌘ ←→", label: "Move focus"),
         Hint(keys: "⇧⌘↩", label: "Zoom"),
         Hint(keys: "⌘W", label: "Close"),

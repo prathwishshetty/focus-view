@@ -9,6 +9,7 @@ import Observation
 enum BrowserSettings {
     enum Key {
         static let searchEngine = "searchEngine"
+        static let searchSuggestions = "search.engineSuggestions"
         static let newPaneBehavior = "newPaneBehavior"
         static let homepage = "homepage"
         static let appearance = "appearance"
@@ -27,6 +28,7 @@ enum BrowserSettings {
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
             Key.searchEngine: SearchEngine.google.rawValue,
+            Key.searchSuggestions: true,
             Key.newPaneBehavior: NewPaneBehavior.newTabPage.rawValue,
             Key.homepage: "",
             Key.appearance: AppearanceMode.system.rawValue,
@@ -47,6 +49,9 @@ enum BrowserSettings {
     static var searchEngine: SearchEngine {
         SearchEngine(rawValue: store.string(forKey: Key.searchEngine) ?? "") ?? .google
     }
+
+    /// Whether the address bar asks the search engine for suggestions as you type.
+    static var searchSuggestions: Bool { store.bool(forKey: Key.searchSuggestions) }
 
     static var newPaneBehavior: NewPaneBehavior {
         NewPaneBehavior(rawValue: store.string(forKey: Key.newPaneBehavior) ?? "") ?? .newTabPage

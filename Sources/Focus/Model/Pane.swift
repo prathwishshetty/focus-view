@@ -40,6 +40,18 @@ final class Pane: Identifiable {
     /// Bumped to ask the new tab page to focus its search field.
     private(set) var newTabFocusRequest = 0
 
+    // Find in page.
+    private(set) var isFindBarVisible = false
+    var findQuery = ""
+    private(set) var findResult = FindResult()
+    /// Bumped to ask the find bar to focus (and select) its field.
+    private(set) var findFocusRequest = 0
+
+    // Reader mode.
+    /// Whether the page looks like an article that reader mode can show.
+    private(set) var isReaderAvailable = false
+    private(set) var isReaderVisible = false
+
     @ObservationIgnored weak var workspace: Workspace?
     @ObservationIgnored private(set) var webView: FocusWebView?
     /// The container view currently displaying `webView`. While SwiftUI animates a
@@ -48,6 +60,12 @@ final class Pane: Identifiable {
     @ObservationIgnored weak var webHost: NSView?
     @ObservationIgnored private var coordinator: PaneWebCoordinator?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
+    @ObservationIgnored private var findTask: Task<Void, Never>?
+
+    /// Shows the article in reader mode; created the first time it's needed.
+    @ObservationIgnored private(set) var readerWebView: FocusWebView?
+    @ObservationIgnored weak var readerHost: NSView?
+    @ObservationIgnored private var readerCoordinator: ReaderCoordinator?
 
     /// Creates a pane. Pass `configuration` when WebKit asks for a new web view
     /// (`window.open`, `target=_blank`); WebKit requires that exact configuration.
@@ -96,6 +114,53 @@ final class Pane: Identifiable {
     func goForward() { webView?.goForward() }
     func stopLoading() { webView?.stopLoading() }
 
+    /// Pages behind this one, nearest first (for the back button's menu).
+    var backList: [BackForwardEntry] {
+        Self.entries(Array((webView?.backForwardList.backList ?? []).reversed()))
+    }
+
+    /// Pages ahead of this one, nearest first (for the forward button's menu).
+    var forwardList: [BackForwardEntry] {
+        Self.entries(webView?.backForwardList.forwardList ?? [])
+    }
+
+    func go(to item: WKBackForwardListItem) {
+        webView?.go(to: item)
+    }
+
+    private static func entries(_ items: [WKBackForwardListItem]) -> [BackForwardEntry] {
+        items.prefix(25).enumerated().map { offset, item in
+            let title = item.title.flatMap { $0.isEmpty ? nil : $0 } ?? AddressFormatter.displayHost(for: item.url)
+            return BackForwardEntry(id: offset, title: title, url: item.url, item: item)
+        }
+    }
+
+    /// The web view on screen: the page, or its reader view.
+    var displayedWebView: FocusWebView? {
+        isReaderVisible ? readerWebView : webView
+    }
+
+    func hostedWebView(for surface: WebSurface) -> FocusWebView? {
+        switch surface {
+        case .page: webView
+        case .reader: readerWebView
+        }
+    }
+
+    func host(for surface: WebSurface) -> NSView? {
+        switch surface {
+        case .page: webHost
+        case .reader: readerHost
+        }
+    }
+
+    func setHost(_ view: NSView?, for surface: WebSurface) {
+        switch surface {
+        case .page: webHost = view
+        case .reader: readerHost = view
+        }
+    }
+
     func reload(fromOrigin: Bool = false) {
         guard let webView else { return }
         loadError = nil
@@ -137,6 +202,18 @@ final class Pane: Identifiable {
     func pageDidCommit() {
         requiredPageWidth = nil
         applyZoom()
+        isReaderAvailable = false
+        isReaderVisible = false
+        findResult = FindResult()
+    }
+
+    /// The page finished loading: remember it, and see whether reader mode applies.
+    func pageDidFinishLoading() {
+        if let url = webView?.url {
+            HistoryStore.shared.recordVisit(url, title: title)
+        }
+        checkReaderAvailability()
+        if isFindBarVisible, !findQuery.isEmpty { search(findQuery) }
     }
 
     /// Sites with a fixed minimum width overflow narrow splits. Zoom them out just
@@ -151,10 +228,150 @@ final class Pane: Identifiable {
         if abs(webView.pageZoom - zoom) > 0.005 {
             webView.pageZoom = zoom
         }
+        // Reader mode lays itself out for any width, so it just follows the user's zoom.
+        if let readerWebView, abs(readerWebView.pageZoom - userZoom) > 0.005 {
+            readerWebView.pageZoom = userZoom
+        }
     }
 
     func requestNewTabFocus() {
         newTabFocusRequest &+= 1
+    }
+
+    // MARK: - Find in page
+
+    func showFindBar() {
+        guard content == .web else { return }
+        isFindBarVisible = true
+        findFocusRequest &+= 1
+        if !findQuery.isEmpty { search(findQuery) }
+    }
+
+    func hideFindBar() {
+        guard isFindBarVisible else { return }
+        findTask?.cancel()
+        isFindBarVisible = false
+        findResult = FindResult()
+        for webView in [webView, readerWebView].compactMap({ $0 }) {
+            runFindScript("return window.__focusFind.clear();", in: webView)
+        }
+        if let webView = displayedWebView, let window = webView.window {
+            window.makeFirstResponder(webView)
+        }
+    }
+
+    /// Searches as the user types, after a short pause.
+    func findQueryDidChange() {
+        findTask?.cancel()
+        let query = findQuery
+        guard !query.isEmpty else {
+            findResult = FindResult()
+            if let webView = displayedWebView { runFindScript("return window.__focusFind.clear();", in: webView) }
+            return
+        }
+        findTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled else { return }
+            self?.search(query)
+        }
+    }
+
+    func findNext() { stepFind(by: 1) }
+    func findPrevious() { stepFind(by: -1) }
+
+    private func stepFind(by delta: Int) {
+        guard isFindBarVisible, !findQuery.isEmpty, let webView = displayedWebView else { return }
+        guard findResult.count > 0 else { return search(findQuery) }
+        runFindScript("return window.__focusFind.step(delta);", arguments: ["delta": delta], in: webView)
+    }
+
+    private func search(_ query: String) {
+        guard let webView = displayedWebView else { return }
+        runFindScript("return window.__focusFind.search(query);", arguments: ["query": query], in: webView)
+    }
+
+    private func runFindScript(_ body: String, arguments: [String: Any] = [:], in webView: WKWebView) {
+        // Runs in an isolated world, so pages can neither see nor break it.
+        webView.callAsyncJavaScript(
+            FindInPage.script + "\n" + body,
+            arguments: arguments,
+            in: nil,
+            in: .defaultClient
+        ) { [weak self] result in
+            MainActor.assumeIsolated {
+                guard let self, self.isFindBarVisible, webView === self.displayedWebView,
+                      case .success(let value) = result, let state = value as? [String: Any] else { return }
+                self.findResult = FindResult(
+                    count: (state["count"] as? Int) ?? 0,
+                    index: (state["index"] as? Int) ?? 0
+                )
+            }
+        }
+    }
+
+    // MARK: - Reader mode
+
+    func toggleReader() {
+        isReaderVisible ? hideReader() : showReader()
+    }
+
+    func showReader() {
+        guard let webView, content == .web, !isReaderVisible, let pageURL = webView.url else { return }
+        webView.callAsyncJavaScript(ReaderMode.extractionScript, arguments: [:], in: nil, in: .defaultClient) { [weak self] result in
+            MainActor.assumeIsolated {
+                guard let self, self.webView?.url == pageURL else { return }
+                guard case .success(let value) = result, let article = ReaderArticle(value) else {
+                    NSSound.beep()
+                    return
+                }
+                let reader = self.readerWebView ?? self.installReaderWebView()
+                reader.pageZoom = self.userZoom
+                reader.loadHTMLString(ReaderMode.document(for: article, pageURL: pageURL), baseURL: pageURL)
+                self.isReaderVisible = true
+                if self.workspace?.focusedPaneID == self.id { self.workspace?.focusContent() }
+            }
+        }
+    }
+
+    func hideReader() {
+        guard isReaderVisible else { return }
+        isReaderVisible = false
+        if workspace?.focusedPaneID == id { workspace?.focusContent() }
+        if isFindBarVisible, !findQuery.isEmpty { search(findQuery) }
+    }
+
+    /// The reader view finished laying out the article.
+    func readerDidFinishLoading() {
+        if isFindBarVisible, !findQuery.isEmpty { search(findQuery) }
+    }
+
+    private func checkReaderAvailability() {
+        guard let webView, let url = webView.url, url.scheme == "https" || url.scheme == "http" else {
+            isReaderAvailable = false
+            return
+        }
+        webView.callAsyncJavaScript(ReaderMode.availabilityScript, arguments: [:], in: nil, in: .defaultClient) { [weak self] result in
+            MainActor.assumeIsolated {
+                guard let self, self.webView?.url == url, case .success(let value) = result else { return }
+                self.isReaderAvailable = (value as? Bool) ?? false
+            }
+        }
+    }
+
+    private func installReaderWebView() -> FocusWebView {
+        let reader = FocusWebView(frame: .zero, configuration: ReaderMode.makeConfiguration())
+        reader.allowsMagnification = true
+        reader.isInspectable = BrowserSettings.webInspector
+        let coordinator = ReaderCoordinator(pane: self)
+        reader.navigationDelegate = coordinator
+        reader.uiDelegate = coordinator
+        reader.contextMenuExtender = { [weak self] menu in
+            guard let self, let workspace = self.workspace else { return }
+            workspace.appendPaneMenuItems(to: menu, for: self.id)
+        }
+        readerWebView = reader
+        readerCoordinator = coordinator
+        return reader
     }
 
     // MARK: - Web view lifecycle
@@ -195,8 +412,18 @@ final class Pane: Identifiable {
             }
         }
         observations = [
-            sync(\.title) { $0.title = $1 ?? "" },
-            sync(\.url) { pane, url in if let url { pane.url = url } },
+            sync(\.title) { pane, title in
+                pane.title = title ?? ""
+                if let title, !title.isEmpty, let url = pane.webView?.url {
+                    HistoryStore.shared.updateTitle(title, for: url)
+                }
+            },
+            sync(\.url) { pane, url in
+                guard let url else { return }
+                pane.url = url
+                // Same-document navigations (history.pushState) never "finish"; record them here.
+                if !pane.isLoading { HistoryStore.shared.recordVisit(url, title: pane.title) }
+            },
             sync(\.isLoading) { $0.isLoading = $1 },
             sync(\.estimatedProgress) { $0.progress = $1 },
             sync(\.canGoBack) { $0.canGoBack = $1 },
@@ -221,7 +448,38 @@ final class Pane: Identifiable {
         }
         webView = nil
         coordinator = nil
+
+        findTask?.cancel()
+        if let readerWebView {
+            readerWebView.stopLoading()
+            readerWebView.navigationDelegate = nil
+            readerWebView.uiDelegate = nil
+            readerWebView.contextMenuExtender = nil
+            readerWebView.removeFromSuperview()
+        }
+        readerWebView = nil
+        readerCoordinator = nil
     }
+}
+
+/// Which of a pane's web views a container shows.
+enum WebSurface {
+    case page
+    case reader
+}
+
+/// A page in a pane's back or forward list.
+struct BackForwardEntry: Identifiable {
+    let id: Int
+    let title: String
+    let url: URL
+    let item: WKBackForwardListItem
+}
+
+/// The find bar's status: `index` of `count` (1-based; 0 when nothing matches).
+struct FindResult: Equatable {
+    var count = 0
+    var index = 0
 }
 
 /// A web view whose right-click menu speaks in splits instead of windows.
