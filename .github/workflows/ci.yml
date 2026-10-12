@@ -36,9 +36,7 @@ jobs:
       - name: Bundle Focus.app
         run: scripts/bundle.sh debug
 
-      - name: Build Xcode project
+      - name: Build & test Xcode project
         run: |
-          brew install xcodegen
-          xcodegen generate
           xcodebuild -project Focus.xcodeproj -scheme Focus -configuration Debug \
-            -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+            -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build test

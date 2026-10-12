@@ -1,0 +1,12 @@
+// Copy to Signing.local.xcconfig (git-ignored, next to this file) to sign
+// Focus with your Apple Developer team when building in Xcode.
+
+// Your team ID: developer.apple.com → Account → Membership details.
+DEVELOPMENT_TEAM = ABCDE12345
+CODE_SIGN_IDENTITY = Apple Development
+
+// A bundle identifier for your team. Xcode registers the App ID on the first build.
+PRODUCT_BUNDLE_IDENTIFIER = com.yourname.focus
+
+// Once Apple grants the web browser passkey entitlement to that App ID:
+// CODE_SIGN_ENTITLEMENTS = Support/FocusPasskeys.entitlements
