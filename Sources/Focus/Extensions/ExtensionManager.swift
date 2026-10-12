@@ -42,6 +42,8 @@ final class ExtensionManager {
     @ObservationIgnored private(set) weak var workspace: Workspace?
     @ObservationIgnored let window = ExtensionWindow()
     @ObservationIgnored private var tabs: [PaneID: ExtensionTab] = [:]
+    /// Panes extensions have been told about.
+    @ObservationIgnored private var openTabIDs: Set<PaneID> = []
     /// Each extension's toolbar button, to anchor its popup.
     @ObservationIgnored private var actionAnchors: [String: WeakView] = [:]
     @ObservationIgnored private var didLoad = false
@@ -304,7 +306,7 @@ final class ExtensionManager {
         self.workspace = workspace
         window.workspace = workspace
         controller.didOpenWindow(window)
-        for pane in workspace.extensionTabOrder { controller.didOpenTab(tab(for: pane)) }
+        for pane in workspace.extensionTabOrder { paneOpened(pane) }
         controller.didActivateTab(tab(for: workspace.focusedPane))
         controller.didFocusWindow(window)
     }
@@ -317,12 +319,13 @@ final class ExtensionManager {
     }
 
     func paneOpened(_ pane: Pane) {
-        guard workspace != nil, tabs[pane.id] == nil else { return }
+        guard workspace != nil, openTabIDs.insert(pane.id).inserted else { return }
         controller.didOpenTab(tab(for: pane))
     }
 
     func paneClosed(_ id: PaneID) {
-        guard let tab = tabs.removeValue(forKey: id) else { return }
+        let tab = tabs.removeValue(forKey: id)
+        guard openTabIDs.remove(id) != nil, let tab else { return }
         controller.didCloseTab(tab)
     }
 
@@ -332,7 +335,7 @@ final class ExtensionManager {
     }
 
     func pane(_ pane: Pane, didChange properties: WKWebExtension.TabChangedProperties) {
-        guard let tab = tabs[pane.id] else { return }
+        guard openTabIDs.contains(pane.id), let tab = tabs[pane.id] else { return }
         controller.didChangeTabProperties(properties, for: tab)
     }
 }
