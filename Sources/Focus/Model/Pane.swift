@@ -37,9 +37,6 @@ final class Pane: Identifiable {
 
     var loadError: LoadError?
 
-    /// Bumped to ask the new tab page to focus its search field.
-    private(set) var newTabFocusRequest = 0
-
     // Find in page.
     private(set) var isFindBarVisible = false
     var findQuery = ""
@@ -232,10 +229,6 @@ final class Pane: Identifiable {
         if let readerWebView, abs(readerWebView.pageZoom - userZoom) > 0.005 {
             readerWebView.pageZoom = userZoom
         }
-    }
-
-    func requestNewTabFocus() {
-        newTabFocusRequest &+= 1
     }
 
     // MARK: - Find in page

@@ -52,6 +52,12 @@ struct Omnibox: View {
         .frame(minWidth: 260, idealWidth: 520, maxWidth: 640, minHeight: 30)
         .background(RegisteringArea { workspace.registerOmniboxView($0) })
         .onChange(of: workspace.addressFocusRequest) { beginEditing() }
+        .onAppear {
+            // At launch the first pane is empty: start in the address bar, once the window is up.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                if workspace.focusedPane.content == .newTab, !isEditing { beginEditing() }
+            }
+        }
         .onChange(of: isFieldFocused) { _, focused in
             // Clicking a page (or anywhere else) ends editing.
             if !focused, isEditing { endEditing() }
@@ -170,7 +176,8 @@ struct Omnibox: View {
 
     private func cancel() {
         endEditing()
-        workspace.focusContent()
+        // An empty pane would send the cursor straight back here; leave it at rest.
+        if workspace.focusedPane.content == .web { workspace.focusContent() }
     }
 
     private func selectAll() {

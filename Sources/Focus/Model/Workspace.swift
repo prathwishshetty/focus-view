@@ -95,7 +95,12 @@ final class Workspace {
                 window.makeFirstResponder(webView)
             }
         } else {
-            pane.requestNewTabFocus()
+            // An empty pane: start typing in the address bar. Deferred so the
+            // address bar has caught up with the change of focus first.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.focusedPaneID == pane.id, pane.content == .newTab else { return }
+                self.focusAddressBar()
+            }
         }
     }
 
@@ -110,6 +115,16 @@ final class Workspace {
 
     func focusPrevious() {
         if let id = tree.previous(before: focusedPaneID) { focus(id) }
+    }
+
+    /// Focuses `id` (if needed) and starts editing its address in the address bar.
+    func editAddress(of id: PaneID) {
+        if focusedPaneID != id {
+            // Focusing an empty pane already puts the cursor in the address bar.
+            focus(id)
+        } else {
+            focusAddressBar()
+        }
     }
 
     func focusAddressBar() {

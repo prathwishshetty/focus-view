@@ -7,8 +7,6 @@ struct NewTabView: View {
     let pane: Pane
     let isFocused: Bool
 
-    @State private var query = ""
-    @FocusState private var isFieldFocused: Bool
     @Environment(Workspace.self) private var workspace
     @AppStorage(BrowserSettings.Key.showClock) private var showClock = true
     @AppStorage(BrowserSettings.Key.showFavorites) private var showFavorites = true
@@ -57,55 +55,42 @@ struct NewTabView: View {
             }
             .frame(width: size.width, height: size.height)
         }
-        .onAppear {
-            if isFocused { focusField() }
-        }
-        .onChange(of: isFocused) { _, focused in
-            if focused { focusField() }
-        }
-        .onChange(of: pane.newTabFocusRequest) {
-            focusField()
-        }
     }
 
+    /// Looks like a search field, but typing happens in the address bar at the
+    /// top (which has suggestions); clicking here just sends you there.
     private func searchField(compact: Bool) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: compact ? 15 : 17, weight: .medium))
-                .foregroundStyle(.secondary)
-            TextField("Search or enter address", text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: compact ? 15 : 18))
-                .focused($isFieldFocused)
-                .onSubmit(submit)
-                .onKeyPress(.escape) {
-                    query = ""
-                    return .handled
-                }
-            if !query.isEmpty {
-                Image(systemName: "return")
-                    .font(.system(size: 12, weight: .semibold))
+        let isTypingAbove = isFocused && workspace.omnibox.isEditing
+        return Button {
+            workspace.editAddress(of: pane.id)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: compact ? 15 : 17, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text(isTypingAbove ? "Type in the address bar above" : "Search or enter address")
+                    .font(.system(size: compact ? 15 : 18))
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
+                Spacer(minLength: 8)
+                Text(isTypingAbove ? "↑" : "⌘L")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(.tertiary)
-                    .transition(.opacity.combined(with: .scale))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             }
+            .padding(.horizontal, 20)
+            .frame(height: compact ? 44 : 54)
+            .contentShape(Capsule())
         }
-        .padding(.horizontal, 20)
-        .frame(height: compact ? 44 : 54)
+        .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .capsule)
         .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
-        .animation(.easeOut(duration: 0.15), value: query.isEmpty)
-    }
-
-    private func submit() {
-        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        query = ""
-        pane.navigate(to: text)
-    }
-
-    private func focusField() {
-        // Wait a beat so the field exists in the window before focusing it.
-        DispatchQueue.main.async { isFieldFocused = true }
+        .opacity(isTypingAbove ? 0.6 : 1)
+        .animation(.easeOut(duration: 0.18), value: isTypingAbove)
+        .pointerStyle(.link)
+        .help("Search or enter an address (⌘L)")
     }
 }
 
