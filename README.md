@@ -118,6 +118,46 @@ make xcode    # generate Focus.xcodeproj with XcodeGen and open it
 swift run     # quick start as a bare executable
 ```
 
+To work in Xcode, run `make xcode` (needs `brew install xcodegen`) and use
+the **Focus** scheme in `Focus.xcodeproj`. Opening the folder or
+`Package.swift` in Xcode instead runs Focus as a bare executable, like a
+command-line tool: no app bundle, icon, bundle identifier, Info.plist or
+entitlements, so it looks like a developer tool in the Dock and can't use
+passkeys. `swift run` does the same.
+
+### Signing and passkeys
+
+`make run` signs the app ad-hoc, which is enough to run it but not to sign in
+with **passkeys or security keys**. On macOS a browser built on `WKWebView`
+may only use them when it's signed with Apple's web browser passkey
+entitlement (`com.apple.developer.web-browser.public-key-credential`), which
+Apple grants on request. Without it, sites report that the browser doesn't
+support passkeys.
+
+1. **Request the entitlement.** The Account Holder of your Apple Developer
+   account submits the request form linked from the
+   [entitlement's documentation](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.web-browser.public-key-credential).
+2. **Register an App ID** (Certificates, Identifiers & Profiles → Identifiers)
+   with an explicit bundle identifier such as `com.yourname.focus`. Once Apple
+   approves the request, enable the entitlement for it (on that App ID or as an
+   additional capability when generating the profile).
+3. **Create a macOS provisioning profile** for that App ID: *macOS App
+   Development* (register this Mac as a device) or *Developer ID* to share
+   builds. Download it.
+4. **Point the build at it:** copy `signing.env.example` to `signing.env`
+   (git-ignored) and set your signing identity
+   (`security find-identity -v -p codesigning` lists them) and the profile's
+   path. Then `make run`.
+
+The build uses the profile's bundle identifier and embeds the profile. It
+claims the passkey entitlement only once the profile includes it, so you can
+sign with your identity before Apple approves the request. The last line of
+the build says whether passkeys are on.
+
+A signed build runs in the App Sandbox with the hardened runtime, and its
+bundle identifier differs from the ad-hoc build's, so it starts with its own
+history, favorites, settings and website logins.
+
 ## Layout
 
 ```
