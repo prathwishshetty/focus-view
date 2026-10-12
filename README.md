@@ -66,6 +66,9 @@ pane. New pages open as splits instead of in a tab strip or sidebar.
   back as the pane widens. Your own ⌘+/⌘- zoom is the upper limit.
 - `target=_blank`, `window.open` and ⌘-click open as a **new split** next to the
   current pane. ⇧⌘-click also moves focus to it.
+- **Web extensions**, loaded from a folder or a `.zip` (see
+  [Extensions](#extensions)). uBlock Origin Lite installs in one click from
+  Settings. An extension's toolbar button opens its popup for the focused pane.
 - Downloads go to `~/Downloads`. JavaScript alerts, confirms and prompts, file
   uploads, page zoom, and error pages are all handled.
 
@@ -81,7 +84,41 @@ Focus ▸ Settings… (⌘,) opens a standard macOS settings window:
 - **Websites**: default page zoom, shrink-to-fit, block pop-ups, Web Inspector,
   clear history and clear browsing data.
 - **Favorites**: add, edit, remove and reorder the new tab page's sites.
+- **Extensions**: add, update, reload, turn on and off, and remove web
+  extensions, open their settings, and install or update uBlock Origin Lite.
 - **Shortcuts**: a reference of every keyboard shortcut.
+
+## Extensions
+
+Focus runs web extensions with WebKit's own extension support
+(`WKWebExtensionController`), the engine behind Safari's extensions. There's no
+store: you load extensions yourself.
+
+- **uBlock Origin Lite**: Settings ▸ Extensions ▸ *Install uBlock Origin Lite*
+  downloads the latest Safari build (`uBOLite_….safari.zip`) from
+  [its releases](https://github.com/uBlockOrigin/uBOL-home/releases) and loads
+  it. The same button updates it later, keeping its settings.
+- **Anything else**: click **+** and choose an unpacked extension folder (the one
+  with `manifest.json`) or a `.zip` / `.xpi` of one. Adding an extension that's
+  already installed (same name) updates it in place. After editing an unpacked
+  extension's files, add the folder again; *Reload* in the list's right-click
+  menu re-reads what's installed.
+
+Extensions are copied to `~/Library/Containers/<bundle id>/Data/Library/Application Support/Focus/Extensions/`
+(or `~/Library/Application Support/Focus/Extensions/` when run with `swift run`).
+Adding an extension grants what its manifest asks for; if it later asks for
+more, Focus asks you first. Each pane is a tab to extensions, in a single
+window; `tabs.create` and `windows.create` open splits.
+
+Not every extension works. WebKit supports Manifest V3 and non-persistent
+Manifest V2 extensions, but can't block network requests with `webRequest`.
+That's why the classic **uBlock Origin** (Manifest V2, built on blocking
+`webRequest`) doesn't work here, while **uBlock Origin Lite**, which blocks with
+`declarativeNetRequest`, does. Extensions written for Safari are the safest bet;
+Chrome and Firefox builds often work too. Extension keyboard shortcuts and
+right-click menu items aren't supported yet. If an extension misbehaves, its row
+in Settings lists the issues WebKit reported, and with *Allow Web Inspector* on,
+its background page shows up in Safari's Develop menu.
 
 ## Keyboard
 
@@ -177,6 +214,7 @@ Sources/Focus/
                         find-in-page and reader mode
   Views/                Split rendering, pane cards, omnibox and suggestions, command palette, new tab page
   Settings/             Settings window and stored preferences
+  Extensions/           Web extensions: loading, installing, and panes as tabs
   Support/              Keyboard shortcut routing
 ```
 
@@ -205,7 +243,6 @@ Candidate features, roughly grouped. None of these are built yet.
 ### Privacy & security
 - **Private panes**: a pane with its own ephemeral data store that leaves nothing behind.
 - **Per-site permissions**: camera, microphone, location and notifications, managed in Settings.
-- **Content blocking** using WebKit content rules (ads, trackers), with per-site toggles.
 - **HTTPS-only mode** with a warning page before loading plain-http sites.
 - **Separate profiles** (work / personal) with isolated cookies.
 

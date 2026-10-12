@@ -44,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.activate()
         BrowserSettings.appearance.apply()
+        MainActor.assumeIsolated {
+            Task { await ExtensionManager.shared.loadInstalled() }
+        }
 
         remapWindowClose()
         NotificationCenter.default.addObserver(
@@ -65,7 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        MainActor.assumeIsolated { HistoryStore.shared.saveNow() }
+        MainActor.assumeIsolated {
+            HistoryStore.shared.saveNow()
+            ExtensionManager.shared.saveNow()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

@@ -18,6 +18,9 @@ struct SettingsView: View {
             Tab("Favorites", systemImage: "star") {
                 FavoritesSettings()
             }
+            Tab("Extensions", systemImage: "puzzlepiece.extension") {
+                ExtensionsSettings()
+            }
             Tab("Shortcuts", systemImage: "keyboard") {
                 ShortcutsSettings()
             }
@@ -387,7 +390,7 @@ private struct ShortcutsSettings: View {
     }
 }
 
-private extension Text {
+extension Text {
     func settingsFootnote() -> some View {
         font(.footnote).foregroundStyle(.secondary)
     }

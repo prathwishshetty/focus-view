@@ -23,6 +23,7 @@ enum BrowserSettings {
         static let blockPopups = "web.blockPopups"
         static let webInspector = "web.inspector"
         static let favorites = "favorites"
+        static let extensions = "extensions"
     }
 
     static func registerDefaults() {

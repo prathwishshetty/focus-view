@@ -85,6 +85,10 @@ final class Pane: Identifiable {
 
     var displayHost: String? {
         guard content == .web, let url else { return nil }
+        // An extension's own page (its settings, say) shows the extension's name.
+        if let name = ExtensionManager.shared.context(forExtensionURL: url)?.webExtension.displayName {
+            return name
+        }
         return AddressFormatter.displayHost(for: url)
     }
 
@@ -97,7 +101,7 @@ final class Pane: Identifiable {
     }
 
     func load(_ url: URL) {
-        let webView = webView ?? installWebView(configuration: nil)
+        let webView = webViewForLoading(url)
         loadError = nil
         self.url = url
         if url.isFileURL {
@@ -369,6 +373,23 @@ final class Pane: Identifiable {
 
     // MARK: - Web view lifecycle
 
+    /// The web view to load `url` in. A web extension's own pages need a web view
+    /// made from that extension's configuration, and web pages need a regular
+    /// one, so moving between the two swaps the pane's web view.
+    private func webViewForLoading(_ url: URL) -> FocusWebView {
+        let extensionContext = ExtensionManager.shared.context(forExtensionURL: url)
+        let extensionHost = extensionContext?.baseURL.host
+        if let webView, webView.extensionHost == extensionHost { return webView }
+
+        let configuration = ExtensionManager.shared.webViewConfiguration(for: url)
+        if webView != nil { releaseWebView() }
+        let webView = installWebView(configuration: configuration)
+        webView.extensionHost = configuration == nil ? nil : extensionHost
+        // Put the new web view where the old one was.
+        (webHost as? WebContainerView)?.refresh()
+        return webView
+    }
+
     @discardableResult
     private func installWebView(configuration: WKWebViewConfiguration?) -> FocusWebView {
         let webView = FocusWebView(frame: .zero, configuration: configuration ?? WebViewFactory.makeConfiguration())
@@ -417,14 +438,19 @@ final class Pane: Identifiable {
                 if let title, !title.isEmpty, let url = pane.webView?.url {
                     HistoryStore.shared.updateTitle(title, for: url)
                 }
+                ExtensionManager.shared.pane(pane, didChange: .title)
             },
             sync(\.url) { pane, url in
                 guard let url else { return }
                 pane.url = url
                 // Same-document navigations (history.pushState) never "finish"; record them here.
                 if !pane.isLoading { HistoryStore.shared.recordVisit(url, title: pane.title) }
+                ExtensionManager.shared.pane(pane, didChange: .URL)
             },
-            sync(\.isLoading) { $0.isLoading = $1 },
+            sync(\.isLoading) { pane, isLoading in
+                pane.isLoading = isLoading
+                ExtensionManager.shared.pane(pane, didChange: .loading)
+            },
             sync(\.estimatedProgress) { $0.progress = $1 },
             sync(\.canGoBack) { $0.canGoBack = $1 },
             sync(\.canGoForward) { $0.canGoForward = $1 },
@@ -435,6 +461,21 @@ final class Pane: Identifiable {
 
     /// Releases the web view. Called when the pane is closed.
     func tearDown() {
+        releaseWebView()
+
+        findTask?.cancel()
+        if let readerWebView {
+            readerWebView.stopLoading()
+            readerWebView.navigationDelegate = nil
+            readerWebView.uiDelegate = nil
+            readerWebView.contextMenuExtender = nil
+            readerWebView.removeFromSuperview()
+        }
+        readerWebView = nil
+        readerCoordinator = nil
+    }
+
+    private func releaseWebView() {
         observations.forEach { $0.invalidate() }
         observations.removeAll()
         if let webView {
@@ -449,17 +490,6 @@ final class Pane: Identifiable {
         }
         webView = nil
         coordinator = nil
-
-        findTask?.cancel()
-        if let readerWebView {
-            readerWebView.stopLoading()
-            readerWebView.navigationDelegate = nil
-            readerWebView.uiDelegate = nil
-            readerWebView.contextMenuExtender = nil
-            readerWebView.removeFromSuperview()
-        }
-        readerWebView = nil
-        readerCoordinator = nil
     }
 }
 
@@ -493,6 +523,8 @@ final class FocusWebView: WKWebView {
     var onRequiredWidthReport: ((CGFloat) -> Void)?
     /// Opens a link in a new split beside this view's pane (from focus://history).
     var openInNewSplit: ((URL) -> Void)?
+    /// The host of the web extension whose pages this view shows, if it's one of those.
+    var extensionHost: String?
 
     override func setFrameSize(_ newSize: NSSize) {
         let changed = newSize.width != frame.size.width
@@ -531,6 +563,8 @@ enum WebViewFactory {
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop
         configuration.userContentController = sharedContentController
         configuration.setURLSchemeHandler(FocusPageSchemeHandler.shared, forURLScheme: FocusPages.scheme)
+        // Content blockers and content scripts from the user's extensions.
+        configuration.webExtensionController = ExtensionManager.shared.controller
         return configuration
     }
 

@@ -76,6 +76,12 @@ final class WebContainerView: NSView {
         isFocused = focused
     }
 
+    /// Picks up a web view the pane swapped in.
+    func refresh() {
+        guard let pane else { return }
+        update(pane: pane, isFocused: isFocused, cornerRadius: layer?.cornerRadius ?? 0)
+    }
+
     func detach() {
         guard let pane else { return }
         if let webView, webView.superview === self {

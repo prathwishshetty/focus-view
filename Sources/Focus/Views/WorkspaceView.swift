@@ -54,6 +54,12 @@ struct WorkspaceView: View {
         // The field draws its own backdrop, so its suggestions can continue it.
         .sharedBackgroundVisibility(.hidden)
 
+        if !ExtensionManager.shared.toolbarExtensionIDs.isEmpty {
+            ToolbarItem(placement: .primaryAction) {
+                ExtensionToolbarButtons()
+            }
+        }
+
         if !workspace.minimizedPanes.isEmpty {
             ToolbarItem(placement: .primaryAction) {
                 MinimizedShelf()

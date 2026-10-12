@@ -8,7 +8,7 @@ final class PaneWebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
     private var downloadDestinations: [ObjectIdentifier: URL] = [:]
 
     /// Schemes the web view handles itself; everything else is handed to macOS.
-    private static let webSchemes: Set<String> = ["http", "https", "about", "file", "data", "blob", "javascript", FocusPages.scheme]
+    private static let webSchemes: Set<String> = ["http", "https", "about", "file", "data", "blob", "javascript", "webkit-extension", FocusPages.scheme]
 
     init(pane: Pane) {
         self.pane = pane
@@ -27,6 +27,15 @@ final class PaneWebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
 
         // The browser's own pages (focus://history) open as a whole page, never inside another one.
         if url.scheme?.lowercased() == FocusPages.scheme, navigationAction.targetFrame?.isMainFrame == false {
+            return .cancel
+        }
+
+        // A web extension's own pages and web pages can't share a web view: let the
+        // pane load the page, swapping in the right kind of web view.
+        if navigationAction.targetFrame?.isMainFrame == true, let pane,
+           let webView = webView as? FocusWebView,
+           ExtensionManager.shared.context(forExtensionURL: url)?.baseURL.host != webView.extensionHost {
+            DispatchQueue.main.async { pane.load(url) }
             return .cancel
         }
 
@@ -131,6 +140,11 @@ final class PaneWebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
         guard let pane, let workspace = pane.workspace else { return nil }
         // Link clicks always open; script-opened windows respect "Block pop-up windows".
         if BrowserSettings.blockPopups, navigationAction.navigationType != .linkActivated {
+            return nil
+        }
+        // Links out of an extension's own pages load as regular web pages.
+        if (webView as? FocusWebView)?.extensionHost != nil, let url = navigationAction.request.url {
+            workspace.openInNewPane(url, beside: pane.id, focus: true)
             return nil
         }
         let newPane = workspace.openPopup(beside: pane.id, configuration: configuration)

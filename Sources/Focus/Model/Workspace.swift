@@ -13,8 +13,12 @@ import WebKit
 @Observable
 final class Workspace {
     private(set) var tree: SplitTree
-    private(set) var panes: [PaneID: Pane]
-    private(set) var focusedPaneID: PaneID
+    private(set) var panes: [PaneID: Pane] {
+        didSet { reportPaneChanges(from: oldValue) }
+    }
+    private(set) var focusedPaneID: PaneID {
+        didSet { ExtensionManager.shared.focusChanged(from: oldValue, to: focusedPaneID) }
+    }
     /// When set, only this pane is shown, filling the window.
     private(set) var zoomedPaneID: PaneID?
     /// Panes taken out of the layout but kept loaded, newest last.
@@ -49,7 +53,15 @@ final class Workspace {
         focusedPaneID = first.id
         first.workspace = self
         palette.workspace = self
+        ExtensionManager.shared.attach(self)
         if let homepage = BrowserSettings.homepageURL { first.load(homepage) }
+    }
+
+    /// Tells web extensions about panes that opened or closed (they see panes as tabs).
+    private func reportPaneChanges(from old: [PaneID: Pane]) {
+        let extensions = ExtensionManager.shared
+        for (id, pane) in panes where old[id] == nil { extensions.paneOpened(pane) }
+        for id in old.keys where panes[id] == nil { extensions.paneClosed(id) }
     }
 
     /// A fresh pane showing the new tab page, or the homepage if the user set one.
@@ -72,6 +84,11 @@ final class Workspace {
     var isZoomed: Bool { zoomedPaneID != nil }
 
     func pane(_ id: PaneID) -> Pane? { panes[id] }
+
+    /// Every pane in layout order, then minimized ones: the tabs web extensions see.
+    var extensionTabOrder: [Pane] {
+        (tree.leaves + minimizedPanes.map(\.id)).compactMap { panes[$0] }
+    }
 
     // MARK: - Focus
 
@@ -255,6 +272,29 @@ final class Workspace {
         let pane = Pane(workspace: self)
         insertPane(pane, beside: paneID, direction: automaticDirection(for: paneID), focus: focus)
         pane.load(url)
+    }
+
+    /// Opens a pane for a web extension (`tabs.create`, `windows.create`, its settings page).
+    @discardableResult
+    func openPaneForExtension(_ url: URL?, focus: Bool) -> Pane {
+        // An empty focused pane is put to use rather than split.
+        if let url, focusedPane.content == .newTab {
+            focusedPane.load(url)
+            return focusedPane
+        }
+        let pane = url == nil ? makeNewPane() : Pane(workspace: self)
+        insertPane(pane, beside: focusedPaneID, direction: automaticDirection(for: focusedPaneID), focus: focus)
+        if let url { pane.load(url) }
+        return pane
+    }
+
+    /// Brings a pane forward: restores it if it's minimized, then focuses it.
+    func activate(_ id: PaneID) {
+        if minimizedPanes.contains(where: { $0.id == id }) {
+            restore(id)
+        } else {
+            focus(id)
+        }
     }
 
     /// Creates the pane WebKit asked for via `window.open` / `target=_blank`.
