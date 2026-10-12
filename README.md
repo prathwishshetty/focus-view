@@ -118,6 +118,13 @@ make xcode    # generate Focus.xcodeproj with XcodeGen and open it
 swift run     # quick start as a bare executable
 ```
 
+To work in Xcode, run `make xcode` (needs `brew install xcodegen`) and use
+the **Focus** scheme in `Focus.xcodeproj`. Opening the folder or
+`Package.swift` in Xcode instead runs Focus as a bare executable, like a
+command-line tool: no app bundle, icon, bundle identifier, Info.plist or
+entitlements, so it looks like a developer tool in the Dock and can't use
+passkeys. `swift run` does the same.
+
 ### Signing and passkeys
 
 `make run` signs the app ad-hoc, which is enough to run it but not to sign in
